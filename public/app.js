@@ -96,7 +96,7 @@ function renderShelf() {
   } else {
     $("shelf-head").style.gridTemplateColumns = "";
     const mins = Math.round(c.tracks.reduce((a, t) => a + t.s, 0) / 60);
-    $("shelf-head").innerHTML = `<img src="/genres/${c.slug}.webp" alt=""><div><h2>${esc(c.name)}</h2>
+    $("shelf-head").innerHTML = `<img src="/genres/${c.slug}.webp" alt="" onerror="this.style.visibility='hidden'"><div><h2>${esc(c.name)}</h2>
       <p>${c.tracks.length} songs, about ${mins >= 90 ? Math.round(mins / 60) + " hours" : mins + " minutes"} of music.</p>
       <a class="zip" href="${zipUrl(c)}">Download all ${c.tracks.length} as a zip</a></div>`;
   }
