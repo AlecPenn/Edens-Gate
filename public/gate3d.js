@@ -44,10 +44,29 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const path = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 9), new THREE.MeshBasicMaterial({ map: pathTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   path.rotation.x = -Math.PI / 2; path.position.set(0, 0.01, 1.5); scene.add(path);
 
+  // ── cartoon look: flat cel shading + bold ink outlines ──
+  const toonRamp = (() => { const d = new Uint8Array([70, 70, 70, 255, 150, 150, 150, 255, 255, 255, 255, 255]);
+    const t = new THREE.DataTexture(d, 3, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
+  const toon = (color) => new THREE.MeshToonMaterial({ color, gradientMap: toonRamp });
+  const INK = 0x0b1210, inked = [];
+  function ink(mesh, w = 0.02) {
+    const g = mesh.geometry, p = g.parameters || {};
+    let o;
+    if (g.type === "BoxGeometry") { // boxes: a slightly larger shell (flat normals would split at the corners)
+      o = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide, fog: false }));
+      o.scale.set((p.width + 2 * w) / p.width, (p.height + 2 * w) / p.height, (p.depth + 2 * w) / p.depth);
+    } else { // everything else: push the surface out along its normals
+      const m = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide, fog: false });
+      m.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", `vec3 transformed = position + normal * ${w.toFixed(4)};`); };
+      o = new THREE.Mesh(g, m);
+    }
+    o.userData.ink = true; mesh.add(o); inked.push(o); return mesh;
+  }
+
   // ── stone pillars + arch ──
-  const stone = new THREE.MeshStandardMaterial({ color: 0x2c4a45, roughness: 0.85, metalness: 0.05 });
-  const gold = new THREE.MeshStandardMaterial({ color: GOLD, metalness: 1, roughness: 0.3 });
-  const iron = new THREE.MeshStandardMaterial({ color: 0x1d1a14, metalness: 0.85, roughness: 0.42 });
+  const stone = toon(0x3e7068);
+  const gold = toon(0xe2b950);
+  const iron = toon(0x2a241b);
   const W = 1.55; // half the opening
   for (const s of [-1, 1]) {
     const p = new THREE.Mesh(new THREE.BoxGeometry(0.62, 3.6, 0.62), stone); p.position.set(s * (W + 0.31), 1.8, 0); scene.add(p);
@@ -98,7 +117,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: LAMP, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   glow.scale.set(9, 7, 1); glow.position.set(0, 1.8, -4); scene.add(glow);
   // tree silhouettes in the garden
-  const treeMat = new THREE.MeshBasicMaterial({ color: 0x0c201d });
+  const treeMat = toon(0x0c201d);
   for (const [x, z, s] of [[-3.2, -6, 1.3], [2.8, -7, 1.6], [-1.2, -9, 1.9], [4.5, -5, 1.1], [-5, -8, 1.7], [0.9, -11, 2.2]]) {
     const t = new THREE.Mesh(new THREE.ConeGeometry(0.9 * s, 3.2 * s, 7), treeMat); t.position.set(x, 1.6 * s, z); scene.add(t);
   }
@@ -121,9 +140,14 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     const behind = i < PUFFS * 0.6;
     m.position.set((Math.random() - 0.5) * (behind ? 4 : 12), 0.3 + Math.random() * 1.1, behind ? -0.5 - Math.random() * 3 : 0.5 + Math.random() * 5);
     const sc = 2.2 + Math.random() * 3; m.scale.set(sc, sc * 0.6, 1);
-    m.userData = { v: new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.02 + Math.random() * 0.03, 0.15 + Math.random() * 0.35), spin: (Math.random() - 0.5) * 0.15, base: 0.18 + Math.random() * 0.22, behind };
+    m.userData = { v: new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.02 + Math.random() * 0.03, 0.15 + Math.random() * 0.35), spin: (Math.random() - 0.5) * 0.15, base: (behind ? 0.18 : 0.1) + Math.random() * (behind ? 0.22 : 0.1), behind };
     scene.add(m); puffs.push(m);
   }
+
+  // ink outlines on the architecture and trees
+  scene.traverse((o) => { if (o.isMesh && !o.userData.ink && !o.parent?.userData?.ink && [stone, gold, iron, treeMat].includes(o.material)) {
+    const g = o.geometry, big = g.type === "BoxGeometry" || (g.parameters?.radius > 0.5);
+    ink(o, o.material === treeMat ? 0.07 : big ? 0.045 : 0.018); } });
 
   // ══════════ DAY & NIGHT ══════════
   // sky dome
@@ -135,7 +159,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   });
   const sky = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 16), skyMat); scene.add(sky);
   const P = {
-    night: { top: new THREE.Color(0x061412), horizon: new THREE.Color(0x12302c), fog: new THREE.Color(0x12302c), fogD: 0.085, ground: new THREE.Color(0x0f2622),
+    night: { top: new THREE.Color(0x061412), horizon: new THREE.Color(0x12302c), fog: new THREE.Color(0x12302c), fogD: 0.05, ground: new THREE.Color(0x0f2622),
              hemiSky: new THREE.Color(0x6fa6a2), hemiGround: new THREE.Color(0x0a1a17), hemiI: 0.35, garden: new THREE.Color(0xebd9a0), exposure: 1.1, mist: new THREE.Color(0x9fc9c4) },
     day:   { top: new THREE.Color(0x6fa8c4), horizon: new THREE.Color(0xf3e3b8), fog: new THREE.Color(0xd9e4d6), fogD: 0.045, ground: new THREE.Color(0x4f7a4a),
              hemiSky: new THREE.Color(0xcfe6f2), hemiGround: new THREE.Color(0x3f5f39), hemiI: 1.25, garden: new THREE.Color(0xfff0c8), exposure: 1.0, mist: new THREE.Color(0xffffff) },
@@ -190,25 +214,47 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, map: glowTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   scene.add(stars);
 
-  // the black cat, sitting in the gateway
-  const cat = new THREE.Group(); cat.position.set(0.3, 0, -0.2); cat.rotation.y = -0.35; cat.scale.setScalar(1.35); scene.add(cat);
-  const fur = new THREE.MeshStandardMaterial({ color: 0x020202, roughness: 0.75, metalness: 0, envMapIntensity: 0.15, transparent: true, opacity: 1 });
-  const blob = (r, sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), fur); m.scale.set(sx, sy, sz); m.position.set(x, y, z); cat.add(m); return m; };
-  blob(0.3, 1, 1.15, 0.95, 0, 0.36, -0.05);      // haunches
-  blob(0.2, 1, 1.25, 1, 0, 0.58, 0.1);           // chest
-  const head = new THREE.Group(); head.position.set(0, 0.88, 0.14); cat.add(head);
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.15, 24, 16), fur); skull.scale.set(1.08, 0.95, 1); head.add(skull);
-  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), fur); muzzle.position.set(0, -0.04, 0.12); muzzle.scale.set(1.2, 0.8, 0.9); head.add(muzzle);
+  // TOMMY — Cosmo's black cat, sitting in the gateway (big head, big shiny eyes, tall ears, tail curled up)
+  const cat = new THREE.Group(); cat.position.set(0.3, 0, 0.5); cat.rotation.y = -0.28; scene.add(cat);
+  const fur = toon(0x17171d); fur.fog = false;
+  const part = (geo, mat, x, y, z, sx = 1, sy = 1, sz = 1, parent = cat, w = 0.012) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); parent.add(m); ink(m, w); return m; };
+  part(new THREE.SphereGeometry(0.17, 28, 18), fur, 0, 0.17, -0.06, 1, 0.92, 1.12);          // haunches
+  part(new THREE.SphereGeometry(0.13, 28, 18), fur, 0, 0.31, 0.04, 0.95, 1.3, 0.9);           // chest
   for (const sx of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.13, 4), fur); ear.position.set(sx * 0.085, 0.14, -0.01); ear.rotation.z = -sx * 0.25; head.add(ear);
-    const paw = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.38, 10), fur); paw.position.set(sx * 0.08, 0.2, 0.2); cat.add(paw);
+    part(new THREE.CylinderGeometry(0.026, 0.03, 0.27, 12), fur, sx * 0.055, 0.14, 0.1);      // skinny front legs
+    part(new THREE.SphereGeometry(0.038, 16, 10), fur, sx * 0.058, 0.02, 0.125, 1, 0.7, 1.25); // paws
+    part(new THREE.SphereGeometry(0.06, 16, 10), fur, sx * 0.13, 0.07, -0.02, 0.7, 0.55, 1.3); // back feet
   }
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xd9ec7a, fog: false });
-  const eyes = [];
-  for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 8), eyeMat); e.position.set(sx * 0.055, 0.02, 0.135); e.scale.set(1, 0.75, 0.5); head.add(e); eyes.push(e); }
-  const tailCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.12, -0.28), new THREE.Vector3(0.25, 0.05, -0.18), new THREE.Vector3(0.34, 0.04, 0.08), new THREE.Vector3(0.22, 0.05, 0.3), new THREE.Vector3(0.05, 0.09, 0.34)]);
-  const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 32, 0.035, 8, false), fur); cat.add(tail);
-  const tailTip = new THREE.Group(); cat.add(tailTip);
+  const head = new THREE.Group(); head.position.set(0, 0.56, 0.06); cat.add(head);
+  part(new THREE.SphereGeometry(0.21, 32, 22), fur, 0, 0, 0, 1.12, 0.96, 0.95, head, 0.014);
+  part(new THREE.SphereGeometry(0.06, 16, 12), fur, 0, -0.07, 0.17, 1.35, 0.8, 0.8, head, 0.008); // muzzle
+  const innerEar = toon(0x3b2b38), ears = []; innerEar.fog = false;
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Group(); ear.position.set(sx * 0.12, 0.15, -0.01); ear.rotation.z = -sx * 0.32; head.add(ear);
+    part(new THREE.ConeGeometry(0.085, 0.22, 20), fur, 0, 0.09, 0, 1, 1, 0.6, ear, 0.012);
+    part(new THREE.ConeGeometry(0.05, 0.15, 16), innerEar, 0, 0.08, 0.035, 1, 1, 0.3, ear, 0.004);
+    ears.push(ear);
+  }
+  // the eyes: big, dark and glossy with white sparkles
+  const eyeBase = new THREE.MeshBasicMaterial({ color: 0x0d1626, fog: false }), irisMat = new THREE.MeshBasicMaterial({ color: 0x2e4f7a, fog: false }), shine = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+  const eyeMat = irisMat, eyes = [];
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Group(); eye.position.set(sx * 0.088, 0.015, 0.17); eye.rotation.y = sx * 0.22; head.add(eye);
+    part(new THREE.SphereGeometry(0.068, 24, 16), eyeBase, 0, 0, 0, 1, 1.12, 0.45, eye, 0.008);
+    const iris = new THREE.Mesh(new THREE.CircleGeometry(0.05, 24), irisMat); iris.position.set(0, -0.008, 0.031); iris.scale.y = 1.1; eye.add(iris);
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.032, 24), eyeBase); pupil.position.set(0, -0.01, 0.032); pupil.scale.y = 1.15; eye.add(pupil);
+    const big = new THREE.Mesh(new THREE.CircleGeometry(0.02, 16), shine); big.position.set(sx * 0.015 + 0.012, 0.025, 0.034); eye.add(big);
+    const small = new THREE.Mesh(new THREE.CircleGeometry(0.009, 12), shine); small.position.set(-0.018, -0.03, 0.034); eye.add(small);
+    eyes.push(eye);
+  }
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 8), new THREE.MeshBasicMaterial({ color: 0x3b2b38 })); nose.position.set(0, -0.045, 0.215); nose.scale.set(1.3, 0.8, 0.7); head.add(nose);
+  // the tail sweeps up behind him and curls at the tip
+  const tailPivot = new THREE.Group(); tailPivot.position.set(0.04, 0.08, -0.22); cat.add(tailPivot);
+  const tailCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.09, 0.08, -0.08), new THREE.Vector3(0.16, 0.3, -0.08), new THREE.Vector3(0.12, 0.52, -0.02), new THREE.Vector3(0.03, 0.62, 0.02), new THREE.Vector3(-0.03, 0.58, 0.04)]);
+  const tail = part(new THREE.TubeGeometry(tailCurve, 48, 0.03, 10, false), fur, 0, 0, 0, 1, 1, 1, tailPivot, 0.01);
+  const tailTip = part(new THREE.SphereGeometry(0.03, 12, 8), fur, -0.03, 0.58, 0.04, 1, 1, 1, tailPivot, 0.01);
+  const tailEnd = part(new THREE.SphereGeometry(0.031, 12, 8), fur, 0, 0, 0, 1, 1, 1, tailPivot, 0.01);
+  void tail; void tailTip; void tailEnd;
   let blinkAt = 3, flickAt = 5;
 
   let target = mode === "day" ? 1 : 0, kk = target; // 0 = night, 1 = day
@@ -231,7 +277,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     moon.visible = k < 0.99; moonDisc.material.opacity = 1 - k; moonGlow.material.opacity = (1 - k) * 0.45;
     moonLight.intensity = (1 - k) * 0.9;
     stars.material.opacity = (1 - k) * 0.9;
-    cat.visible = k < 0.98; fur.opacity = 1 - k; eyeMat.color.setRGB(0.85, 0.92, 0.48).multiplyScalar(1 - k);
+    const tk = Math.max(0, 1 - k * 1.6); cat.visible = tk > 0.01; cat.scale.setScalar(2.1 * (0.4 + 0.6 * tk)); cat.position.y = -0.3 * (1 - tk); void eyeMat;
     fireflies.visible = k < 0.95;
   }
 
@@ -267,9 +313,10 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     kk += (target - kk) * Math.min(1, dt * 1.6); applyMode(kk, T, now);
     for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 30) c.position.x = -30; }
     // the cat blinks and flicks its tail now and then
-    if (T > blinkAt) { const b = T - blinkAt; const sy = b < 0.15 ? 0.75 * (1 - b / 0.15) + 0.05 : b < 0.3 ? 0.05 + 0.7 * ((b - 0.15) / 0.15) : 0.75; eyes.forEach((e) => e.scale.y = sy); if (b > 0.3) blinkAt = T + 2.5 + Math.random() * 4; }
-    if (T > flickAt) { const f = T - flickAt; tail.rotation.y = Math.sin(f * 9) * 0.12 * Math.max(0, 1 - f / 0.9); if (f > 0.9) { tail.rotation.y = 0; flickAt = T + 3 + Math.random() * 5; } }
-    head.rotation.y = Math.sin(T * 0.4) * 0.12;
+    if (T > blinkAt) { const b = T - blinkAt; const sy = b < 0.15 ? 0.75 * (1 - b / 0.15) + 0.05 : b < 0.3 ? 0.05 + 0.7 * ((b - 0.15) / 0.15) : 0.75; eyes.forEach((e) => e.scale.y = Math.max(0.08, sy / 0.75)); if (b > 0.3) blinkAt = T + 2.5 + Math.random() * 4; }
+    if (T > flickAt) { const f = T - flickAt; ears[1].rotation.x = -Math.sin(Math.min(1, f * 4) * Math.PI) * 0.35; if (f > 0.9) { ears[1].rotation.x = 0; flickAt = T + 3 + Math.random() * 5; } }
+    head.rotation.y = Math.sin(T * 0.4) * 0.14 + look.x * 0.4; head.rotation.z = Math.sin(T * 0.27) * 0.06;
+    tailPivot.rotation.z = Math.sin(T * 1.3) * 0.18; tailPivot.rotation.x = Math.sin(T * 0.9) * 0.08;
     if (open > 0.6 && !opened) { opened = true; onOpen && onOpen(); }
     // camera walks forward, then breathes
     const walk = easeIO(T / 5.6);
