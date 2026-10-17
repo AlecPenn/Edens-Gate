@@ -183,11 +183,27 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const moonDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false, fog: false })); moonDisc.scale.set(3.2, 3.2, 1); moon.add(moonDisc);
   const moonGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xcfe3ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); moonGlow.scale.set(12, 12, 1); moon.add(moonGlow);
   const moonLight = new THREE.DirectionalLight(0xbfd8ff, 0); moonLight.position.set(-4, 8, -10); moonLight.target.position.set(0, 0, 2); scene.add(moonLight, moonLight.target);
-  const STARS = mobile ? 250 : 500, sp = new Float32Array(STARS * 3);
+  const STARS = mobile ? 300 : 650, sp = new Float32Array(STARS * 3), sPhase = new Float32Array(STARS), sSpeed = new Float32Array(STARS), sSize = new Float32Array(STARS);
   for (let i = 0; i < STARS; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * 1.2 + 0.15, r = 36;
-    sp[i * 3] = Math.cos(th) * Math.cos(ph) * r; sp[i * 3 + 1] = Math.sin(ph) * r; sp[i * 3 + 2] = Math.sin(th) * Math.cos(ph) * r - 6; }
+    sp[i * 3] = Math.cos(th) * Math.cos(ph) * r; sp[i * 3 + 1] = Math.sin(ph) * r; sp[i * 3 + 2] = Math.sin(th) * Math.cos(ph) * r - 6;
+    sPhase[i] = Math.random() * 6.283; sSpeed[i] = 0.6 + Math.random() * 2.6; sSize[i] = Math.random() < 0.08 ? 2.6 + Math.random() * 1.6 : 0.9 + Math.random() * 1.2; }
   const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute("position", new THREE.BufferAttribute(sp, 3));
-  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, map: glowTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  starGeo.setAttribute("aPhase", new THREE.BufferAttribute(sPhase, 1)); starGeo.setAttribute("aSpeed", new THREE.BufferAttribute(sSpeed, 1)); starGeo.setAttribute("aSize", new THREE.BufferAttribute(sSize, 1));
+  // each star twinkles on its own rhythm; a few bright ones flare now and then
+  const starMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uMap: { value: glowTex }, uScale: { value: renderer.getPixelRatio() } },
+    vertexShader: `attribute float aPhase; attribute float aSpeed; attribute float aSize; uniform float uTime; uniform float uScale; varying float vTw;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0);
+        float s = 0.5 + 0.5 * sin(uTime * aSpeed + aPhase);
+        float flare = pow(max(0.0, sin(uTime * 0.37 * aSpeed + aPhase * 3.0)), 24.0);
+        vTw = 0.25 + 0.75 * s * s + flare * 0.8;
+        gl_PointSize = aSize * uScale * (1.6 + 0.8 * s + flare * 2.5) * (60.0 / -mv.z);
+        gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform sampler2D uMap; uniform float uOpacity; varying float vTw;
+      void main(){ vec4 t = texture2D(uMap, gl_PointCoord); gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * t.rgb, t.a * vTw * uOpacity); }`,
+  });
+  const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
 
   // the black cat, sitting in the gateway
@@ -230,7 +246,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     // night: moon, stars, cat
     moon.visible = k < 0.99; moonDisc.material.opacity = 1 - k; moonGlow.material.opacity = (1 - k) * 0.45;
     moonLight.intensity = (1 - k) * 0.9;
-    stars.material.opacity = (1 - k) * 0.9;
+    starMat.uniforms.uOpacity.value = (1 - k); starMat.uniforms.uTime.value = T;
     cat.visible = k < 0.98; fur.opacity = 1 - k; eyeMat.color.setRGB(0.85, 0.92, 0.48).multiplyScalar(1 - k);
     fireflies.visible = k < 0.95;
   }
