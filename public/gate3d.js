@@ -7,7 +7,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 const GOLD = 0xc2a24d, LAMP = 0xebd9a0, IVY = 0x3d7d7b, DUSK = 0x12302c;
 
-export function startGate(canvas, { onOpen } = {}) {
+export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const mobile = matchMedia("(max-width: 760px), (pointer: coarse)").matches;
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -16,7 +16,6 @@ export function startGate(canvas, { onOpen } = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
-  renderer.setClearColor(DUSK);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(DUSK, 0.085);
@@ -29,13 +28,14 @@ export function startGate(canvas, { onOpen } = {}) {
   camera.position.copy(still ? camEnd : camStart);
 
   // ── light ──
-  scene.add(new THREE.HemisphereLight(0x6fa6a2, 0x0a1a17, 0.35));
+  const hemi = new THREE.HemisphereLight(0x6fa6a2, 0x0a1a17, 0.35); scene.add(hemi);
   const garden = new THREE.PointLight(LAMP, 0, 30, 1.4); garden.position.set(0, 2.2, -3.5); scene.add(garden);
   const rimL = new THREE.SpotLight(0xffe8b8, 30, 20, Math.PI / 7, 0.7, 1.5); rimL.position.set(-5, 7, 6); rimL.target.position.set(0, 1.5, 0); scene.add(rimL, rimL.target);
   const rimR = rimL.clone(); rimR.position.set(5, 7, 6); rimR.target = rimL.target; scene.add(rimR);
 
   // ── ground ──
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x0f2622, roughness: 0.95 }));
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f2622, roughness: 0.95 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), groundMat);
   ground.rotation.x = -Math.PI / 2; scene.add(ground);
   // a path of light through the gate
   const pathTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 256; const g = c.getContext("2d");
@@ -125,6 +125,116 @@ export function startGate(canvas, { onOpen } = {}) {
     scene.add(m); puffs.push(m);
   }
 
+  // ══════════ DAY & NIGHT ══════════
+  // sky dome
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } },
+    vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: "uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main(){ float h = clamp(vP.y*1.6+0.05,0.0,1.0); gl_FragColor = vec4(mix(horizon, top, pow(h,0.8)),1.0); }",
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 16), skyMat); scene.add(sky);
+  const P = {
+    night: { top: new THREE.Color(0x061412), horizon: new THREE.Color(0x12302c), fog: new THREE.Color(0x12302c), fogD: 0.085, ground: new THREE.Color(0x0f2622),
+             hemiSky: new THREE.Color(0x6fa6a2), hemiGround: new THREE.Color(0x0a1a17), hemiI: 0.35, garden: new THREE.Color(0xebd9a0), exposure: 1.1, mist: new THREE.Color(0x9fc9c4) },
+    day:   { top: new THREE.Color(0x6fa8c4), horizon: new THREE.Color(0xf3e3b8), fog: new THREE.Color(0xd9e4d6), fogD: 0.045, ground: new THREE.Color(0x4f7a4a),
+             hemiSky: new THREE.Color(0xcfe6f2), hemiGround: new THREE.Color(0x3f5f39), hemiI: 1.25, garden: new THREE.Color(0xfff0c8), exposure: 1.0, mist: new THREE.Color(0xffffff) },
+  };
+
+  // sun: a blazing disc behind the garden, shafts of light that flicker through the gate
+  const sunGroup = new THREE.Group(); sunGroup.position.set(0, 4.6, -16); scene.add(sunGroup);
+  const sunDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xfff6dc, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  sunDisc.scale.set(5, 5, 1); sunGroup.add(sunDisc);
+  const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffd98a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  sunHalo.scale.set(22, 22, 1); sunGroup.add(sunHalo);
+  const rayTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 512; const g = c.getContext("2d");
+    const v = g.createLinearGradient(0, 0, 0, 512); v.addColorStop(0, "rgba(255,244,214,0.95)"); v.addColorStop(1, "rgba(255,244,214,0)");
+    g.fillStyle = v; g.fillRect(0, 0, 64, 512);
+    const hgr = g.createLinearGradient(0, 0, 64, 0); hgr.addColorStop(0, "rgba(0,0,0,1)"); hgr.addColorStop(0.5, "rgba(0,0,0,0)"); hgr.addColorStop(1, "rgba(0,0,0,1)");
+    g.globalCompositeOperation = "destination-out"; g.fillStyle = hgr; g.fillRect(0, 0, 64, 512);
+    return new THREE.CanvasTexture(c); })();
+  const rays = [];
+  for (let i = 0; i < (mobile ? 6 : 10); i++) {
+    const r = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: rayTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    const ang = (i / ((mobile ? 6 : 10) - 1) - 0.5) * 0.9;
+    r.geometry.translate(0, -0.5, 0); r.scale.set(0.7 + Math.random() * 1.4, 22, 1);
+    r.position.set(0, 4.6, -15); r.rotation.set(-1.15, 0, ang); // fan out from the sun toward the viewer
+    r.userData = { phase: Math.random() * 10, speed: 0.6 + Math.random() * 1.4, base: 0.05 + Math.random() * 0.07 };
+    scene.add(r); rays.push(r);
+  }
+  const sunLight = new THREE.DirectionalLight(0xfff0d0, 0); sunLight.position.set(0, 6, -12); sunLight.target.position.set(0, 0, 4); scene.add(sunLight, sunLight.target);
+
+  // clouds drifting across the sky
+  const clouds = [];
+  for (let i = 0; i < (mobile ? 7 : 12); i++) {
+    const c = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+    const sc = 6 + Math.random() * 8; c.scale.set(sc * 1.8, sc * 0.7, 1);
+    c.position.set(-26 + Math.random() * 52, 7 + Math.random() * 5, -24 + Math.random() * 8);
+    c.userData = { v: 0.25 + Math.random() * 0.45, base: 0.55 + Math.random() * 0.35 };
+    scene.add(c); clouds.push(c);
+  }
+
+  // crescent moon + stars
+  const moonTex = (() => { const s = 256, c = document.createElement("canvas"); c.width = c.height = s; const g = c.getContext("2d");
+    g.fillStyle = "#fbf3d6"; g.beginPath(); g.arc(s / 2, s / 2, s * 0.36, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = "destination-out"; g.beginPath(); g.arc(s / 2 + s * 0.17, s / 2 - s * 0.08, s * 0.33, 0, Math.PI * 2); g.fill();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const moon = new THREE.Group(); moon.position.set(-3.4, 7.6, -18); scene.add(moon);
+  const moonDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false, fog: false })); moonDisc.scale.set(3.2, 3.2, 1); moon.add(moonDisc);
+  const moonGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xcfe3ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); moonGlow.scale.set(12, 12, 1); moon.add(moonGlow);
+  const moonLight = new THREE.DirectionalLight(0xbfd8ff, 0); moonLight.position.set(-4, 8, -10); moonLight.target.position.set(0, 0, 2); scene.add(moonLight, moonLight.target);
+  const STARS = mobile ? 250 : 500, sp = new Float32Array(STARS * 3);
+  for (let i = 0; i < STARS; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * 1.2 + 0.15, r = 36;
+    sp[i * 3] = Math.cos(th) * Math.cos(ph) * r; sp[i * 3 + 1] = Math.sin(ph) * r; sp[i * 3 + 2] = Math.sin(th) * Math.cos(ph) * r - 6; }
+  const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, map: glowTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  scene.add(stars);
+
+  // the black cat, sitting in the gateway
+  const cat = new THREE.Group(); cat.position.set(0.3, 0, -0.2); cat.rotation.y = -0.35; cat.scale.setScalar(1.35); scene.add(cat);
+  const fur = new THREE.MeshStandardMaterial({ color: 0x020202, roughness: 0.75, metalness: 0, envMapIntensity: 0.15, transparent: true, opacity: 1 });
+  const blob = (r, sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), fur); m.scale.set(sx, sy, sz); m.position.set(x, y, z); cat.add(m); return m; };
+  blob(0.3, 1, 1.15, 0.95, 0, 0.36, -0.05);      // haunches
+  blob(0.2, 1, 1.25, 1, 0, 0.58, 0.1);           // chest
+  const head = new THREE.Group(); head.position.set(0, 0.88, 0.14); cat.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.15, 24, 16), fur); skull.scale.set(1.08, 0.95, 1); head.add(skull);
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), fur); muzzle.position.set(0, -0.04, 0.12); muzzle.scale.set(1.2, 0.8, 0.9); head.add(muzzle);
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.13, 4), fur); ear.position.set(sx * 0.085, 0.14, -0.01); ear.rotation.z = -sx * 0.25; head.add(ear);
+    const paw = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.38, 10), fur); paw.position.set(sx * 0.08, 0.2, 0.2); cat.add(paw);
+  }
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xd9ec7a, fog: false });
+  const eyes = [];
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 8), eyeMat); e.position.set(sx * 0.055, 0.02, 0.135); e.scale.set(1, 0.75, 0.5); head.add(e); eyes.push(e); }
+  const tailCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.12, -0.28), new THREE.Vector3(0.25, 0.05, -0.18), new THREE.Vector3(0.34, 0.04, 0.08), new THREE.Vector3(0.22, 0.05, 0.3), new THREE.Vector3(0.05, 0.09, 0.34)]);
+  const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 32, 0.035, 8, false), fur); cat.add(tail);
+  const tailTip = new THREE.Group(); cat.add(tailTip);
+  let blinkAt = 3, flickAt = 5;
+
+  let target = mode === "day" ? 1 : 0, kk = target; // 0 = night, 1 = day
+  const tmp = new THREE.Color(), treeNight = new THREE.Color(0x0c201d), treeDay = new THREE.Color(0x2e5a3c);
+  function applyMode(k, T, now) {
+    const n = P.night, d = P.day, mix = (a, b) => tmp.copy(a).lerp(b, k);
+    skyMat.uniforms.top.value.copy(n.top).lerp(d.top, k); skyMat.uniforms.horizon.value.copy(n.horizon).lerp(d.horizon, k);
+    scene.fog.color.copy(mix(n.fog, d.fog)); scene.fog.density = n.fogD + (d.fogD - n.fogD) * k;
+    groundMat.color.copy(mix(n.ground, d.ground)); treeMat.color.copy(mix(treeNight, treeDay));
+    hemi.color.copy(mix(n.hemiSky, d.hemiSky)); hemi.groundColor.copy(mix(n.hemiGround, d.hemiGround)); hemi.intensity = n.hemiI + (d.hemiI - n.hemiI) * k;
+    renderer.toneMappingExposure = n.exposure + (d.exposure - n.exposure) * k;
+    garden.color.copy(mix(n.garden, d.garden));
+    // sun: flicker like light through moving leaves
+    const flick = 0.85 + 0.1 * Math.sin(T * 3.1) + 0.05 * Math.sin(T * 7.3 + 1.7);
+    sunGroup.visible = k > 0.01; sunDisc.material.opacity = k * flick; sunHalo.material.opacity = k * 0.55 * flick;
+    sunLight.intensity = k * 2.4 * flick;
+    for (const r of rays) { const u = r.userData; r.material.opacity = k * u.base * (0.55 + 0.45 * Math.sin(T * u.speed + u.phase)) * Math.min(1, T / 2); }
+    for (const c of clouds) { c.material.opacity = k * c.userData.base; }
+    // night: moon, stars, cat
+    moon.visible = k < 0.99; moonDisc.material.opacity = 1 - k; moonGlow.material.opacity = (1 - k) * 0.45;
+    moonLight.intensity = (1 - k) * 0.9;
+    stars.material.opacity = (1 - k) * 0.9;
+    cat.visible = k < 0.98; fur.opacity = 1 - k; eyeMat.color.setRGB(0.85, 0.92, 0.48).multiplyScalar(1 - k);
+    fireflies.visible = k < 0.95;
+  }
+
   // ── the walk ──
   let t0 = performance.now(), raf = 0, visible = true, opened = false, dead = false;
   const pointer = { x: 0, y: 0 }, look = { x: 0, y: 0 };
@@ -153,7 +263,13 @@ export function startGate(canvas, { onOpen } = {}) {
     left.rotation.y = open * 1.25; right.rotation.y = -open * 1.25; // swing inward, into the garden
     const light = ease((T - 0.9) / 3.5);
     garden.intensity = 2 + light * 38; glow.material.opacity = 0.15 + light * 0.75;
-    path.material.opacity = light * 0.35; fireflies.material.opacity = light * 0.9;
+    path.material.opacity = light * 0.35; fireflies.material.opacity = light * 0.9 * (1 - kk);
+    kk += (target - kk) * Math.min(1, dt * 1.6); applyMode(kk, T, now);
+    for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 30) c.position.x = -30; }
+    // the cat blinks and flicks its tail now and then
+    if (T > blinkAt) { const b = T - blinkAt; const sy = b < 0.15 ? 0.75 * (1 - b / 0.15) + 0.05 : b < 0.3 ? 0.05 + 0.7 * ((b - 0.15) / 0.15) : 0.75; eyes.forEach((e) => e.scale.y = sy); if (b > 0.3) blinkAt = T + 2.5 + Math.random() * 4; }
+    if (T > flickAt) { const f = T - flickAt; tail.rotation.y = Math.sin(f * 9) * 0.12 * Math.max(0, 1 - f / 0.9); if (f > 0.9) { tail.rotation.y = 0; flickAt = T + 3 + Math.random() * 5; } }
+    head.rotation.y = Math.sin(T * 0.4) * 0.12;
     if (open > 0.6 && !opened) { opened = true; onOpen && onOpen(); }
     // camera walks forward, then breathes
     const walk = easeIO(T / 5.6);
@@ -166,7 +282,7 @@ export function startGate(canvas, { onOpen } = {}) {
     for (const m of puffs) {
       const u = m.userData, push = m.userData.behind ? open : 0.3;
       m.position.x += u.v.x * dt; m.position.y += u.v.y * dt * 0.3; m.position.z += u.v.z * dt * (0.4 + push * 1.6);
-      m.material.rotation += u.spin * dt;
+      m.material.rotation += u.spin * dt; m.material.color.copy(P.night.mist).lerp(P.day.mist, kk);
       if (m.position.z > 7 || m.position.y > 2.4) { m.position.set((Math.random() - 0.5) * 4, 0.3 + Math.random() * 0.6, -2.5 - Math.random() * 1.5); m.material.opacity = 0; }
       const fadeIn = Math.min(1, T / 1.5);
       m.material.opacity += ((u.base * fadeIn * (m.position.z > 5 ? (7 - m.position.z) / 2 : 1)) - m.material.opacity) * 0.05;
@@ -182,6 +298,7 @@ export function startGate(canvas, { onOpen } = {}) {
 
   return {
     replay() { t0 = performance.now(); opened = false; tick(); },
+    setMode(m) { target = m === "day" ? 1 : 0; tick(); },
     dispose() { dead = true; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", onVis); removeEventListener("pointermove", onMove); renderer.dispose(); pmrem.dispose(); },
   };
 }

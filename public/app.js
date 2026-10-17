@@ -12,13 +12,29 @@ const songUrl = (t) => `${IA}/${t.ia}/${encodeURIComponent(t.f)}`;
 const zipUrl = (c) => `https://archive.org/compress/${c.ia}/formats=VBR%20MP3&file=/${encodeURIComponent(c.ia)}.zip`;
 
 function webgl() { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch (e) { return false; } }
+let gate = null;
+function currentMode() { return document.documentElement.dataset.theme === "day" ? "day" : "night"; }
+function showMode() {
+  const m = currentMode(), b = $("mode");
+  b.textContent = m === "day" ? "☀ Day" : "☾ Night";
+  b.setAttribute("aria-label", m === "day" ? "Switch to night" : "Switch to day");
+  document.querySelector('meta[name="theme-color"]').content = m === "day" ? "#e3ece2" : "#12302c";
+}
+$("mode").onclick = () => {
+  const m = currentMode() === "day" ? "night" : "day";
+  document.documentElement.dataset.theme = m;
+  try { localStorage.setItem("egMode", m); } catch (e) {}
+  gate?.setMode(m); showMode();
+};
+showMode();
+
 async function startEntrance() {
   const stage = $("stage");
   if (webgl()) {
     try {
       const { startGate } = await import("/gate3d.js");
       stage.classList.add("has3d");
-      startGate($("gate3d"), { onOpen: () => stage.classList.add("is-open") });
+      gate = startGate($("gate3d"), { mode: currentMode(), onOpen: () => stage.classList.add("is-open") });
       return;
     } catch (e) { console.warn("3D gate unavailable, using the drawn gate", e); stage.classList.remove("has3d"); }
   }

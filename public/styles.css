@@ -10,6 +10,20 @@
   --inscribed: "Cinzel", "Times New Roman", serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
 }
+/* day: the same garden in full sun */
+:root[data-theme="day"] {
+  --verdigris: #e3ece2; --moss: #f2f5ee; --ivy: #8fae9c; --mist: #1d3a34;
+  --iron: #8a6d27; --lamplight: #6e5418; --blossom: #8a4f63;
+}
+:root[data-theme="day"] .song .c, :root[data-theme="day"] .song .d, :root[data-theme="day"] .beds button small,
+:root[data-theme="day"] .p-coll, :root[data-theme="day"] .p-time, :root[data-theme="day"] .search input::placeholder { color: #5b7a72; }
+:root[data-theme="day"] .songs, :root[data-theme="day"] .song, :root[data-theme="day"] .foot { border-color: #c8d8cc; }
+:root[data-theme="day"] .player { background: #f2f5ee; }
+:root[data-theme="day"] .zip { color: #fff; background: #6e5418; }
+:root[data-theme="day"] .zip:hover { background: #1d3a34; color: #fff; }
+:root[data-theme="day"] .beds button[aria-current="true"] { color: #6e5418; }
+:root[data-theme="day"] .stage.has3d .inscribed { color: #fffaf0; text-shadow: 0 1px 18px rgba(80,60,10,.55); }
+html, body { transition: background-color .9s ease, color .9s ease; }
 * { box-sizing: border-box; }
 html { background: var(--verdigris); }
 body {
@@ -39,7 +53,14 @@ a:hover { color: #fff; }
   color: var(--lamplight); opacity: 0; transition: opacity 2.5s ease; text-shadow: 0 0 24px rgba(235,217,160,.45);
 }
 .stage.has3d.is-open .inscribed { opacity: .92; }
-.stage.has3d + .intro { margin-top: -18vh; position: relative; z-index: 1; }
+.mode {
+  position: absolute; top: 14px; right: 16px; z-index: 2; font: inherit; font-size: 17px; cursor: pointer;
+  color: var(--lamplight); background: color-mix(in srgb, var(--verdigris) 70%, transparent);
+  border: 1px solid var(--iron); border-radius: 999px; padding: 6px 16px; backdrop-filter: blur(6px);
+}
+.mode:hover { color: var(--mist); }
+.stage:not(.has3d) .mode { position: static; margin: 0 auto 12px; display: block; }
+.stage.has3d + .intro { margin-top: -9vh; position: relative; z-index: 1; }
 .intro { padding: 0 16px; }
 .gate { width: min(560px, 100%); height: auto; display: block; margin: 0 auto -8px; overflow: visible; }
 .inscription { font-family: var(--inscribed); font-size: 30px; letter-spacing: .32em; fill: var(--lamplight); }
@@ -130,6 +151,7 @@ a:hover { color: #fff; }
 .p-time { font-family: var(--mono); font-size: 12px; color: #8fb3b1; min-width: 4.5em; text-align: right; }
 
 @media (max-width: 760px) {
+  .stage.has3d .inscribed { top: 64px; letter-spacing: .38em; }
   body { font-size: 18px; }
   .library { grid-template-columns: 1fr; gap: 20px; margin-top: 32px; }
   .beds { position: static; overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
