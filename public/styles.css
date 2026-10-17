@@ -60,7 +60,7 @@ a:hover { color: #fff; }
 }
 .mode:hover { color: var(--mist); }
 .stage:not(.has3d) .mode { position: static; margin: 0 auto 12px; display: block; }
-.stage.has3d + .intro { margin-top: -4vh; position: relative; z-index: 1; }
+.stage.has3d + .intro { margin-top: -9vh; position: relative; z-index: 1; }
 .intro { padding: 0 16px; }
 .gate { width: min(560px, 100%); height: auto; display: block; margin: 0 auto -8px; overflow: visible; }
 .inscription { font-family: var(--inscribed); font-size: 30px; letter-spacing: .32em; fill: var(--lamplight); }
