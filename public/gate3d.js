@@ -57,13 +57,19 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   }
   const arch = new THREE.Mesh(new THREE.TorusGeometry(W + 0.31, 0.12, 16, 80, Math.PI), iron); arch.position.set(0, 3.6, 0); scene.add(arch);
   const archGold = new THREE.Mesh(new THREE.TorusGeometry(W + 0.12, 0.035, 10, 80, Math.PI), gold); archGold.position.set(0, 3.6, 0); scene.add(archGold);
-  // filigree in the arch: rays of the sun rising over the garden
-  for (let i = 1; i < 12; i++) {
-    const a = (i / 12) * Math.PI, r = W + 0.1;
-    const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, r * 0.62, 6), gold);
-    ray.position.set(Math.cos(a) * r * 0.5, 3.6 + Math.sin(a) * r * 0.5, 0); ray.rotation.z = a - Math.PI / 2; scene.add(ray);
+
+  // ── the Alec Penn Radio wave seal, in gold ──
+  // outer ring, inner ring, the wave, and three dots (same shape as the APR logo)
+  function waveSeal(R) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.TorusGeometry(R, R * 0.13, 12, 48), gold));
+    g.add(new THREE.Mesh(new THREE.TorusGeometry(R * 0.86, R * 0.045, 8, 48), gold));
+    const r2 = R * 0.8, pts = [];
+    for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push(new THREE.Vector3(-r2 + 2 * r2 * t, R * 0.34 * Math.sin(3 * Math.PI * t), 0)); }
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, R * 0.065, 8, false), gold));
+    for (const dx of [-1, 0, 1]) { const d = new THREE.Mesh(new THREE.SphereGeometry(R * 0.075, 12, 8), gold); d.position.set(dx * R * 0.2, -R * 0.62, 0); g.add(d); }
+    return g;
   }
-  const sun = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 12, 48, Math.PI), gold); sun.position.set(0, 3.6, 0); scene.add(sun);
 
   // ── the doors ──
   function makeDoor(side) {
@@ -79,11 +85,10 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     for (const y of [0.35, 1.25, 2.45]) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), iron); rail.position.set(-side * w / 2, y, 0); door.add(rail);
     }
-    // scrollwork between the rails
+    // Alec Penn Radio wave seals set into the gate, with small rings below
     for (let k = 0; k < 3; k++) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.022, 10, 36), gold);
-      ring.position.set(-side * (0.3 + k * 0.48), 1.85, 0); door.add(ring);
-      const ring2 = ring.clone(); ring2.scale.setScalar(0.55); ring2.position.y = 0.8; door.add(ring2);
+      const seal = waveSeal(0.2); seal.position.set(-side * (0.3 + k * 0.48), 1.85, 0); door.add(seal);
+      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.088, 0.018, 10, 36), gold); ring2.position.set(-side * (0.3 + k * 0.48), 0.8, 0); door.add(ring2);
     }
     const stile = new THREE.Mesh(new THREE.BoxGeometry(0.07, 3.0, 0.07), iron); stile.position.set(-side * (w - 0.02), 1.55, 0); door.add(stile);
     const latch = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), gold); latch.position.set(-side * (w - 0.1), 1.3, 0.06); door.add(latch);
@@ -276,7 +281,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const T = still ? 99 : (now - t0) / 1000;      // seconds since arrival
     const open = easeIO((T - 1.1) / 3.2);           // doors: hold a beat, then swing
-    left.rotation.y = open * 1.25; right.rotation.y = -open * 1.25; // swing inward, into the garden
+    left.rotation.y = open * 0.92; right.rotation.y = -open * 0.92; // swing inward, into the garden
     const light = ease((T - 0.9) / 3.5);
     garden.intensity = 2 + light * 38; glow.material.opacity = 0.15 + light * 0.75;
     path.material.opacity = light * 0.35; fireflies.material.opacity = light * 0.9 * (1 - kk);
