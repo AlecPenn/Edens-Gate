@@ -11,8 +11,22 @@ let collections = [], all = [], current = "all", query = "", shown = PAGE, playi
 const songUrl = (t) => `${IA}/${t.ia}/${encodeURIComponent(t.f)}`;
 const zipUrl = (c) => `https://archive.org/compress/${c.ia}/formats=VBR%20MP3&file=/${encodeURIComponent(c.ia)}.zip`;
 
-async function init() {
+function webgl() { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch (e) { return false; } }
+async function startEntrance() {
+  const stage = $("stage");
+  if (webgl()) {
+    try {
+      const { startGate } = await import("/gate3d.js");
+      stage.classList.add("has3d");
+      startGate($("gate3d"), { onOpen: () => stage.classList.add("is-open") });
+      return;
+    } catch (e) { console.warn("3D gate unavailable, using the drawn gate", e); stage.classList.remove("has3d"); }
+  }
   requestAnimationFrame(() => document.querySelector(".gate-wrap").classList.add("open"));
+}
+
+async function init() {
+  startEntrance();
   const data = await (await fetch("/library.json")).json();
   collections = data.channels.map((c) => ({
     ...c,

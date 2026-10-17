@@ -25,7 +25,22 @@ a:hover { color: #fff; }
 .skip:focus { left: 8px; z-index: 10; }
 
 /* ── the gate ── */
-.gate-wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 8px; text-align: center; }
+.gate-wrap { margin: 0 auto; padding: 0 0 8px; text-align: center; }
+.stage { position: relative; max-width: 1040px; margin: 0 auto; padding: 24px 16px 0; }
+#gate3d { display: none; }
+.stage.has3d { max-width: none; padding: 0; height: clamp(440px, 82vh, 860px); }
+.stage.has3d #gate3d { display: block; width: 100%; height: 100%; }
+.stage.has3d .gate { display: none; }
+.stage.has3d::after { content: ""; position: absolute; inset: auto 0 0 0; height: 30%; background: linear-gradient(transparent, var(--verdigris)); pointer-events: none; }
+.inscribed { display: none; }
+.stage.has3d .inscribed {
+  display: block; position: absolute; left: 0; right: 0; top: clamp(14px, 3vh, 34px); margin: 0;
+  font-family: var(--inscribed); font-size: clamp(15px, 2.2vw, 24px); letter-spacing: .5em; text-transform: uppercase;
+  color: var(--lamplight); opacity: 0; transition: opacity 2.5s ease; text-shadow: 0 0 24px rgba(235,217,160,.45);
+}
+.stage.has3d.is-open .inscribed { opacity: .92; }
+.stage.has3d + .intro { margin-top: -18vh; position: relative; z-index: 1; }
+.intro { padding: 0 16px; }
 .gate { width: min(560px, 100%); height: auto; display: block; margin: 0 auto -8px; overflow: visible; }
 .inscription { font-family: var(--inscribed); font-size: 30px; letter-spacing: .32em; fill: var(--lamplight); }
 .door { transform-box: fill-box; transition: transform 2.4s cubic-bezier(.2,.7,.1,1) .4s; }
