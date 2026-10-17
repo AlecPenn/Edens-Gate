@@ -106,7 +106,7 @@ function renderShelf() {
       <img src="${t.cover}" alt="" loading="lazy" width="44" height="44">
       <div><div class="t">${esc(t.t)}</div>${current === "all" || query ? `<div class="c">${esc(t.coll)}</div>` : ""}</div>
       <span class="d">${fmt(t.s)}</span>
-      <span class="acts"><button data-act="play" aria-label="Play ${esc(t.t)}">${playing === t && !audio.paused ? "Pause" : "Play"}</button><button data-act="dl" aria-label="Download ${esc(t.t)}">Download</button></span>
+      <span class="acts"><button data-act="play" data-on="${playing === t && !audio.paused}" aria-label="${playing === t && !audio.paused ? "Pause" : "Play"} ${esc(t.t)}">${playing === t && !audio.paused ? "Pause" : "Play"}</button><button data-act="dl" aria-label="Download ${esc(t.t)}">Download</button></span>
     </li>`).join("") + (songs.length > shown ? `<li class="more"><button class="zip" id="more">Show ${Math.min(PAGE, songs.length - shown)} more</button></li>` : "")
     : `<li class="empty">No songs called that yet. Try a shorter word, or browse a collection.</li>`;
   $("songs").querySelectorAll(".song").forEach((li) => {
