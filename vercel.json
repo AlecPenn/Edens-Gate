@@ -1,0 +1,9 @@
+{
+  "framework": null,
+  "buildCommand": null,
+  "outputDirectory": "public",
+  "headers": [
+    { "source": "/covers/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] },
+    { "source": "/genres/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] }
+  ]
+}
