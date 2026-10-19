@@ -97,7 +97,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     const latch = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), gold); latch.position.set(-side * (w - 0.1), 1.3, 0.06); door.add(latch);
     return hinge;
   }
-  let left = makeDoor(-1), right = makeDoor(1);
+  let left = makeDoor(-1), right = makeDoor(1), swing = 0.92;
 
   // ── the real gate: mossy stone arch, gold doors with the Wave Seal split down the middle (modelled in Blender) ──
   const gl = new GLTFLoader(); gl.setMeshoptDecoder(MeshoptDecoder);
@@ -108,7 +108,15 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     const dl = model.getObjectByName("DoorL"), dr = model.getObjectByName("DoorR");
     if (!dl || !dr) { scene.remove(model); return; }
     model.traverse((o) => { if (o.isMesh) { o.material.envMapIntensity = 0.6; } });
-    scene.remove(standIn); left = dl; right = dr;
+    // the doors' long cross-bars point straight at you once the gate is open and read as a line across the
+    // archway, so only the low bar stays (the bars are held by the arch and the medallion)
+    model.updateMatrixWorld(true);
+    for (const door of [dl, dr]) door.traverse((o) => {
+      if (!o.isMesh) return;
+      const b = new THREE.Box3().setFromObject(o), sz = b.getSize(new THREE.Vector3());
+      if (sz.x > 0.6 && sz.y < 0.12 && b.getCenter(new THREE.Vector3()).y > 0.6) o.visible = false;
+    });
+    scene.remove(standIn); left = dl; right = dr; swing = 1.42;
     tick();
   });
 
@@ -134,7 +142,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     garden.traverse((o) => { if (o.isMesh) {
       const m = o.material; m.envMapIntensity = 0.5;
       if (m.name === "LanternGlow") lanternMats.push(m);
-      if (/^Leaf|Cypress|Hedge/.test(m.name)) { m.userData.base = m.color.clone(); leafMats.push(m); }
+      if (/^Leaf|Cypress|Hedge|Canopy/.test(m.name)) { m.userData.base = m.color.clone(); leafMats.push(m); }
     } });
     scene.add(garden); scene.remove(oldTrees); tick();
   });
@@ -263,6 +271,19 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 32, 0.035, 8, false), fur); cat.add(tail);
   const tailTip = new THREE.Group(); cat.add(tailTip);
   let blinkAt = 3, flickAt = 5;
+  // Tommy (the real one: black cat, wizard hat, gold APR pendant) takes the cat's seat in the gateway
+  let tommy = null, tommyLids = [], tommyRest = new Map(), tBlink = 4;
+  gl.load("/tommy.glb", (g) => {
+    if (dead) return;
+    const t = g.scene, box = new THREE.Box3().setFromObject(t), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const k = 1.55 / sz.y; t.scale.setScalar(k); t.position.set(-c.x * k, -box.min.y * k, -c.z * k);
+    t.traverse((o) => { const m = o.material; if (m && "sheen" in m && m.sheen > 0) { m.sheen = 0.3; m.sheenRoughness = 0.5; } });
+    tommy = new THREE.Group(); tommy.add(t); tommy.position.set(0.35, 0, -0.1); tommy.rotation.y = -0.3; scene.add(tommy);
+    tommyLids = ["TLidL", "TLidR"].map((n) => t.getObjectByName(n)).filter(Boolean);
+    tommyLids.forEach((l) => tommyRest.set(l, l.quaternion.clone()));
+    cat.visible = false; tick();
+  });
+  const qx = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0);
 
   let target = mode === "day" ? 1 : 0, kk = target; // 0 = night, 1 = day
   const tmp = new THREE.Color(), treeNight = new THREE.Color(0x0c201d), treeDay = new THREE.Color(0x2e5a3c);
@@ -284,7 +305,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     moon.visible = k < 0.99; moonDisc.material.opacity = 1 - k; moonGlow.material.opacity = (1 - k) * 0.45;
     moonLight.intensity = (1 - k) * 0.9;
     starMat.uniforms.uOpacity.value = (1 - k); starMat.uniforms.uTime.value = T;
-    cat.visible = k < 0.98; fur.opacity = 1 - k; eyeMat.color.setRGB(0.85, 0.92, 0.48).multiplyScalar(1 - k);
+    cat.visible = !tommy && k < 0.98; fur.opacity = 1 - k; eyeMat.color.setRGB(0.85, 0.92, 0.48).multiplyScalar(1 - k);
     fireflies.visible = k < 0.95;
     for (const m of leafMats) m.color.copy(leafNight).lerp(m.userData.base, 0.35 + 0.65 * k);
     for (const m of lanternMats) m.emissiveIntensity = 1.2 + (1 - k) * 4;
@@ -315,9 +336,9 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const T = still ? 99 : (now - t0) / 1000;      // seconds since arrival
     const open = easeIO((T - 1.1) / 3.2);           // doors: hold a beat, then swing
-    left.rotation.y = open * 0.92; right.rotation.y = -open * 0.92; // swing inward, into the garden
+    left.rotation.y = open * swing; right.rotation.y = -open * swing; // swing inward, into the garden (wide open, folded back against the pillars)
     const light = ease((T - 0.9) / 3.5);
-    garden.intensity = 2 + light * 38; glow.material.opacity = 0.15 + light * 0.75;
+    garden.intensity = 2 + light * 38; glow.material.opacity = (0.15 + light * 0.75) * (1 - 0.55 * kk);   // softer by day so the garden shows through
     path.material.opacity = light * 0.35; fireflies.material.opacity = light * 0.9 * (1 - kk);
     kk += (target - kk) * Math.min(1, dt * 1.6); applyMode(kk, T, now);
     for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 30) c.position.x = -30; }
@@ -325,6 +346,11 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     if (T > blinkAt) { const b = T - blinkAt; const sy = b < 0.15 ? 0.75 * (1 - b / 0.15) + 0.05 : b < 0.3 ? 0.05 + 0.7 * ((b - 0.15) / 0.15) : 0.75; eyes.forEach((e) => e.scale.y = sy); if (b > 0.3) blinkAt = T + 2.5 + Math.random() * 4; }
     if (T > flickAt) { const f = T - flickAt; tail.rotation.y = Math.sin(f * 9) * 0.12 * Math.max(0, 1 - f / 0.9); if (f > 0.9) { tail.rotation.y = 0; flickAt = T + 3 + Math.random() * 5; } }
     head.rotation.y = Math.sin(T * 0.4) * 0.12;
+    if (tommy) {   // Tommy breathes, glances around, and slow-blinks now and then
+      tommy.rotation.y = -0.3 + Math.sin(T * 0.35) * 0.18;
+      const b = T - tBlink, lid = b > 0 && b < 0.8 ? Math.sin(b / 0.8 * Math.PI) : 0; if (b >= 0.8) tBlink = T + 3 + Math.random() * 4;
+      tommyLids.forEach((l) => l.quaternion.copy(tommyRest.get(l)).multiply(qx.setFromAxisAngle(X, lid * 0.75)));
+    }
     if (open > 0.6 && !opened) { opened = true; onOpen && onOpen(); }
     // camera walks forward, then breathes
     const walk = easeIO(T / 5.6);
