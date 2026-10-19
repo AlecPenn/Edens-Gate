@@ -61,7 +61,7 @@ function pickBed(slug) {
 async function init() {
   startEntrance();
   const data = await (await fetch("/library.json")).json();
-  collections = data.channels.map((c) => ({
+  collections = data.channels.filter((c) => !c.hidden).map((c) => ({   // hidden = still uploading
     ...c,
     tracks: c.tracks.map((t, i) => ({ ...t, ia: c.ia, coll: c.name, slug: c.slug, cover: `/covers/${c.slug}/${t.c ?? i}.webp` })),
   }));
