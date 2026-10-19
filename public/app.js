@@ -39,6 +39,7 @@ async function startEntrance() {
       // walk through the gate into the garden: every rose bed along the path is a collection
       $("enter").onclick = () => { stage.classList.add("in-garden"); document.body.classList.add("garden-lock"); gate.enterGarden(); $("leave").focus(); };
       $("leave").onclick = leaveGarden;
+      $("walk-fwd").onclick = () => gate.walk(2); $("walk-back").onclick = () => gate.walk(-2);
       addEventListener("keydown", (e) => { if (e.key === "Escape" && stage.classList.contains("in-garden")) leaveGarden(); });
       return;
     } catch (e) { console.warn("3D gate unavailable, using the drawn gate", e); stage.classList.remove("has3d"); }

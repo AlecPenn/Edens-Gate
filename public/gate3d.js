@@ -136,14 +136,14 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   // ── the garden behind the gate (modelled in Blender): cypress avenue, blossom trees, flowering hedges,
   //    a stepping-stone path with gold lanterns, and a little pond at the end ──
   const lanternMats = [];
-  gl.load("/garden.glb", (g) => {
+  gl.load(mobile ? "/garden-lite.glb" : "/garden.glb", (g) => {   // phones get a lighter cut of the same garden
     if (dead) return;
     const garden = g.scene; garden.scale.setScalar(0.8); garden.position.z = -0.25;
     garden.traverse((o) => { if (o.isMesh) {
       const m = o.material; m.envMapIntensity = 0.5;
       if (m.name === "LanternGlow") lanternMats.push(m);
-      if (/^Leaf|Cypress|Hedge|Canopy/.test(m.name) && !m.userData.base) { m.userData.base = seasonTint(m.name, m.color.clone()); leafMats.push(m); }
-      if (o.isInstancedMesh && !m.userData.sway) { m.userData.sway = true; addSway(m, /^Leaf|Blossom|Rose|CypressLeaf/.test(m.name)); }
+      if (/^Leaf|Cypress|Hedge|Canopy|Grass|Moss/.test(m.name) && !m.userData.base) { m.userData.base = seasonTint(m.name, m.color.clone()); leafMats.push(m); }
+      if (o.isInstancedMesh && !m.userData.sway) { m.userData.sway = true; addSway(m, /^Leaf|Blossom|Rose|CypressLeaf|Grass|Sepal/.test(m.name)); }
     } });
     scene.add(garden); scene.remove(oldTrees);
     // the rose bushes that line the path become the library's beds, one collection each
@@ -175,13 +175,16 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     if (SEASON === "autumn") {
       if (name === "LeafA") return c.setRGB(0.78, 0.3, 0.06);        // copper
       if (name === "LeafB") return c.setRGB(0.95, 0.6, 0.12);        // gold
+      if (name === "LeafD") return c.setRGB(0.85, 0.22, 0.08);       // red maple
+      if (name === "LeafE") return c.setRGB(0.42, 0.24, 0.07);       // brown
+      if (name === "Grass") return c.lerp(new THREE.Color(0.5, 0.45, 0.2), 0.4);
       if (name === "Canopy") return c.lerp(new THREE.Color(0.55, 0.28, 0.07), 0.6);
     }
     if (SEASON === "winter") {
       if (name === "Hedge" || name === "Cypress" || name === "CypressLeaf") return c.lerp(new THREE.Color(0.75, 0.82, 0.85), 0.25);
       return c.lerp(new THREE.Color(0.62, 0.68, 0.7), 0.45);       // frosted
     }
-    if (SEASON === "spring" && name === "LeafB") return c.setRGB(0.42, 0.72, 0.3);
+    if (SEASON === "spring" && (name === "LeafB" || name === "LeafD")) return c.setRGB(0.42, 0.72, 0.3);
     return c;
   }
   // wind: every tree, bush and leaf bends and flutters in the breeze (done on the graphics card, so it's free)
@@ -489,8 +492,8 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     pickLight.intensity = p && gmode !== "gate" ? 6 + Math.sin(performance.now() / 300) * 1.5 : 0;
     if (p) pickLight.position.set(p.at.x, p.at.y + 0.8, p.at.z);
   }
-  let PATH_END = -9;
-  function walkBy(dz) { if (gmode === "garden" || gmode === "entering") { gzTarget = Math.max(PATH_END, Math.min(1.8, gzTarget - dz)); tick(); } }
+  let PATH_END = -9; const GARDEN_START = 2.6;   // you start just inside the gate; forward is always the same way
+  function walkBy(dz) { if (gmode === "garden" || gmode === "entering") { gzTarget = Math.max(PATH_END, Math.min(GARDEN_START, gzTarget - dz)); tick(); } }
   const onWheel = (e) => { if (gmode !== "garden" && gmode !== "entering") return; e.preventDefault(); walkBy(e.deltaY * 0.006); };
   let touchY = null;
   const onTouchStart = (e) => { if (gmode === "garden" || gmode === "entering") touchY = e.touches[0].clientY; };
@@ -570,6 +573,11 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     } else gardenCamera(dt);
     gAmt += ((gmode === "gate" ? 0 : 1) - gAmt) * Math.min(1, dt * 1.5);
     scene.fog.density *= 1 - 0.55 * gAmt;           // clearer air once you're inside the garden
+    // inside the garden, tone the gateway glow down so the trees and roses keep their colour
+    garden.intensity *= 1 - 0.85 * gAmt; glow.material.opacity *= 1 - 0.85 * gAmt;
+    renderer.toneMappingExposure *= 1 - 0.22 * gAmt * kk; sunHalo.material.opacity *= 1 - 0.6 * gAmt; path.material.opacity *= 1 - gAmt;
+    for (const r of rays) r.material.opacity *= 1 - 0.9 * gAmt;   // no sun-ray haze in your face
+    hemi.intensity *= 1 - 0.4 * gAmt * kk; sunLight.intensity *= 1 - 0.35 * gAmt;
     updateTags();
     // mist rolls out through the opening gate
     for (const m of puffs) {
@@ -595,12 +603,13 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     setBeds(list) { bedList = list; if (bedSpots.length) placeBeds(); },
     enterGarden() {
       if (gmode === "garden" || gmode === "entering") return;
-      fromPos.copy(camera.position); fromLook.set(0, lookY, -1); gz = gzTarget = 2.6; gT = still ? 9 : 0; gk = 0; gmode = "entering"; tick();
+      fromPos.copy(camera.position); fromLook.set(0, lookY, -1); gz = gzTarget = GARDEN_START; gT = still ? 9 : 0; gk = 0; gmode = "entering"; tick();
     },
     leaveGarden() {
       if (gmode === "gate" || gmode === "leaving") return;
       fromPos.copy(camEnd); fromLook.set(0, lookY, -1); gT = still ? 9 : 0; gmode = "leaving"; tick();
     },
+    walk(steps) { walkBy(steps); },
     setPlaying(slug) { picked = slug; beds.forEach((x) => x.el.classList.toggle("on", x.slug === picked)); },
     setMode(m) { target = m === "day" ? 1 : 0; tick(); },
     dispose() { dead = true; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", onVis); removeEventListener("pointermove", onMove); removeEventListener("keydown", onKey); tags.remove(); renderer.dispose(); pmrem.dispose(); },

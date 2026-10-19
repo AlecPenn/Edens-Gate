@@ -225,3 +225,9 @@ body.garden-lock .player { z-index: 60; }
   .garden-hint { font-size: 13px; }
   .bed-tag b { font-size: 14px; }
 }
+
+.walk-pad { display: none; }
+.stage.in-garden .walk-pad { display: flex; flex-direction: column; gap: 8px; position: absolute; right: 16px; bottom: 96px; z-index: 3; }
+.walk-pad button { width: 52px; height: 52px; border-radius: 50%; font-size: 20px; cursor: pointer; color: var(--verdigris);
+  background: var(--lamplight); border: 0; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.walk-pad button:active { transform: scale(.94); }
