@@ -9,7 +9,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 
 const GOLD = 0xc2a24d, LAMP = 0xebd9a0, IVY = 0x3d7d7b, DUSK = 0x12302c;
 
-export function startGate(canvas, { onOpen, mode = "night" } = {}) {
+export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   const mobile = matchMedia("(max-width: 760px), (pointer: coarse)").matches;
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -145,7 +145,21 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
       if (/^Leaf|Cypress|Hedge|Canopy/.test(m.name) && !m.userData.base) { m.userData.base = seasonTint(m.name, m.color.clone()); leafMats.push(m); }
       if (o.isInstancedMesh && !m.userData.sway) { m.userData.sway = true; addSway(m, /^Leaf|Blossom|Rose|CypressLeaf/.test(m.name)); }
     } });
-    scene.add(garden); scene.remove(oldTrees); tick();
+    scene.add(garden); scene.remove(oldTrees);
+    // the rose bushes that line the path become the library's beds, one collection each
+    garden.updateMatrixWorld(true);
+    const seen = new Set(), m4 = new THREE.Matrix4(), v = new THREE.Vector3();
+    garden.traverse((o) => {
+      if (!o.isInstancedMesh || !/^Rose/.test(o.material.name)) return;
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, m4); v.setFromMatrixPosition(m4).applyMatrix4(o.matrixWorld);
+        const key = v.x.toFixed(2) + "," + v.z.toFixed(2);
+        if (!seen.has(key) && Math.abs(v.x) < 1.9 && v.z < -0.5) { seen.add(key); bedSpots.push(v.clone()); }
+      }
+    });
+    bedSpots.sort((a, b) => b.z - a.z || a.x - b.x);
+    if (bedSpots.length) PATH_END = bedSpots[Math.min(bedSpots.length, 18) - 1].z + 2.6;   // stop where you can still read the last bed
+    placeBeds(); tick();
   });
   const leafMats = [], leafNight = new THREE.Color(0x163a30);
 
@@ -244,6 +258,8 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
         a[i * 3] += (Math.sin(T * 1.3 + sd) * 0.35 + 0.15) * dt;            // drift and tumble in the breeze
         a[i * 3 + 2] += Math.cos(T * 0.9 + sd * 1.7) * 0.2 * dt;
         if (a[i * 3 + 1] < 0) { a[i * 3 + 1] = 7 + Math.random() * 2; a[i * 3] = (Math.random() - 0.5) * 18; }
+        const dx = a[i * 3] - camera.position.x, dy = a[i * 3 + 1] - camera.position.y, dzz = a[i * 3 + 2] - camera.position.z;
+        if (dx * dx + dy * dy + dzz * dzz < 1.2) a[i * 3 + 1] = 8;
       }
       fallGeo.attributes.position.needsUpdate = true;
       falling.material.opacity = SEASON === "winter" ? 0.95 : 0.9;
@@ -436,6 +452,71 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     for (const m of lanternMats) m.emissiveIntensity = 1.2 + (1 - k) * 4;
   }
 
+  // ══════════ WALK INTO THE GARDEN: the library as a place ══════════
+  // Each rose bed along the path is one collection. Walk the path (scroll, swipe, arrows), tap a sign to play it.
+  const bedSpots = [], beds = [];
+  let bedList = [], gmode = "gate", gz = 4, gzTarget = 4, gk = 0, picked = null;
+  const tags = document.createElement("div"); tags.className = "bed-tags"; canvas.parentElement.appendChild(tags);
+  const pickLight = new THREE.PointLight(0xffe4a0, 0, 4, 1.6); scene.add(pickLight);
+  function placeBeds() {
+    tags.innerHTML = ""; beds.length = 0;
+    bedList.forEach((b, i) => {
+      const at = bedSpots[i]; if (!at) return;
+      const el = document.createElement("button"); el.type = "button"; el.className = "bed-tag"; el.tabIndex = -1;
+      el.innerHTML = `<b>${b.name.replace(/[&<>]/g, "")}</b><small>${b.n} songs</small>`;
+      el.onclick = () => { picked = b.slug; beds.forEach((x) => x.el.classList.toggle("on", x.slug === picked)); onPick && onPick(b.slug); };
+      tags.appendChild(el); beds.push({ ...b, at, el });
+    });
+  }
+  const proj = new THREE.Vector3();
+  function updateTags() {
+    const w = canvas.clientWidth, h = canvas.clientHeight, show = gmode === "garden" || (gmode === "entering" && gk > 0.7);
+    tags.classList.toggle("show", show);
+    for (const b of beds) {
+      const d = camera.position.distanceTo(b.at);
+      proj.copy(b.at); proj.y += 0.95; proj.project(camera);
+      const vis = show && proj.z < 1 && d < 10 && d > 0.9;
+      b.el.style.display = vis ? "" : "none"; b.el.tabIndex = vis ? 0 : -1;
+      if (!vis) continue;
+      const k = Math.max(0.55, Math.min(1.15, 3.2 / d));
+      const half = b.el.offsetWidth * k / 2 + 6, sx = Math.max(half, Math.min(w - half, (proj.x * 0.5 + 0.5) * w));   // keep signs on screen
+      if (Math.abs(proj.x) > 1.25) { b.el.style.display = "none"; b.el.tabIndex = -1; continue; }
+      b.el.style.transform = `translate(${sx}px, ${(-proj.y * 0.5 + 0.5) * h}px) translate(-50%, -100%) scale(${k})`;
+      b.el.style.opacity = Math.min(1, (10 - d) / 3).toFixed(2);
+      b.el.style.zIndex = String(100 - Math.round(d * 5));
+    }
+    const p = beds.find((b) => b.slug === picked);
+    pickLight.intensity = p && gmode !== "gate" ? 6 + Math.sin(performance.now() / 300) * 1.5 : 0;
+    if (p) pickLight.position.set(p.at.x, p.at.y + 0.8, p.at.z);
+  }
+  let PATH_END = -9;
+  function walkBy(dz) { if (gmode === "garden" || gmode === "entering") { gzTarget = Math.max(PATH_END, Math.min(1.8, gzTarget - dz)); tick(); } }
+  const onWheel = (e) => { if (gmode !== "garden" && gmode !== "entering") return; e.preventDefault(); walkBy(e.deltaY * 0.006); };
+  let touchY = null;
+  const onTouchStart = (e) => { if (gmode === "garden" || gmode === "entering") touchY = e.touches[0].clientY; };
+  const onTouchMove = (e) => { if ((gmode !== "garden" && gmode !== "entering") || touchY === null) return; e.preventDefault(); const y = e.touches[0].clientY; walkBy((touchY - y) * 0.012); touchY = y; };
+  const onKey = (e) => { if (gmode !== "garden" && gmode !== "entering") return; if (e.key === "ArrowUp" || e.key === "w") walkBy(1.2); if (e.key === "ArrowDown" || e.key === "s") walkBy(-1.2); };
+  canvas.parentElement.addEventListener("wheel", onWheel, { passive: false });
+  canvas.parentElement.addEventListener("touchstart", onTouchStart, { passive: true });
+  canvas.parentElement.addEventListener("touchmove", onTouchMove, { passive: false });
+  addEventListener("keydown", onKey);
+  const gardenCam = new THREE.Vector3(), gardenLook = new THREE.Vector3(), fromPos = new THREE.Vector3(), fromLook = new THREE.Vector3(0, 2.6, -1);
+  let gT = 0, gAmt = 0;
+  function gardenCamera(dt) {
+    // where you'd be standing on the path, and where you'd be looking (a little ahead, down the path)
+    gz += (gzTarget - gz) * Math.min(1, dt * 3);
+    const sway = Math.sin(gz * 0.6) * 0.12;
+    const nearGate = Math.max(0, Math.min(1, (gz + 0.8) / 2.6));          // step around Tommy on the way through
+    gardenCam.set(sway - nearGate * 0.75 + look.x * 0.5, 1.6 + nearGate * 0.25 + Math.sin(gz * 2.4) * 0.025, gz);
+    gardenLook.set(sway * 0.5 + look.x * 2.2, 1.25 - look.y * 0.8, gz - 4);
+    if (gmode === "entering" || gmode === "leaving") {
+      gT += dt; gk = Math.min(1, gT / 2.6); const e = easeIO(gk), k = gmode === "entering" ? e : 1 - e;
+      camera.position.lerpVectors(fromPos, gardenCam, k);
+      const lk = new THREE.Vector3().lerpVectors(fromLook, gardenLook, k); camera.lookAt(lk);
+      if (gk >= 1) { if (gmode === "entering") gmode = "garden"; else { gmode = "gate"; } }
+    } else { camera.position.copy(gardenCam); camera.lookAt(gardenLook); }
+  }
+
   // ── the walk ──
   let t0 = performance.now(), raf = 0, visible = true, opened = false, dead = false;
   const pointer = { x: 0, y: 0 }, look = { x: 0, y: 0 };
@@ -472,18 +553,24 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     if (T > flickAt) { const f = T - flickAt; tail.rotation.y = Math.sin(f * 9) * 0.12 * Math.max(0, 1 - f / 0.9); if (f > 0.9) { tail.rotation.y = 0; flickAt = T + 3 + Math.random() * 5; } }
     head.rotation.y = Math.sin(T * 0.4) * 0.12;
     if (tommy) {   // Tommy breathes, glances around, and slow-blinks now and then
-      tommy.rotation.y = -0.3 + Math.sin(T * 0.35) * 0.18;
+      tommy.rotation.y = -0.3 + Math.sin(T * 0.35) * 0.18 * (1 - gAmt) + gAmt * -0.9;
+      tommy.position.x = 0.35 + gAmt * 0.95; tommy.position.z = -0.1 - gAmt * 0.35;   // he steps aside to let you in
       const b = T - tBlink, lid = b > 0 && b < 0.8 ? Math.sin(b / 0.8 * Math.PI) : 0; if (b >= 0.8) tBlink = T + 3 + Math.random() * 4;
       tommyLids.forEach((l) => l.quaternion.copy(tommyRest.get(l)).multiply(qx.setFromAxisAngle(X, lid * 0.75)));
     }
     if (open > 0.6 && !opened) { opened = true; onOpen && onOpen(); }
     // camera walks forward, then breathes
     const walk = easeIO(T / 5.6);
-    camera.position.lerpVectors(camStart, camEnd, still ? 1 : walk);
-    camera.position.y += Math.sin(T * 1.9) * 0.012 * (1 - walk); // footsteps
     look.x += (pointer.x - look.x) * 0.04; look.y += (pointer.y - look.y) * 0.04;
-    camera.position.x += look.x * 0.6; camera.position.y += -look.y * 0.25;
-    camera.lookAt(0, lookY, -1);
+    if (gmode === "gate") {
+      camera.position.lerpVectors(camStart, camEnd, still ? 1 : walk);
+      camera.position.y += Math.sin(T * 1.9) * 0.012 * (1 - walk); // footsteps
+      camera.position.x += look.x * 0.6; camera.position.y += -look.y * 0.25;
+      camera.lookAt(0, lookY, -1);
+    } else gardenCamera(dt);
+    gAmt += ((gmode === "gate" ? 0 : 1) - gAmt) * Math.min(1, dt * 1.5);
+    scene.fog.density *= 1 - 0.55 * gAmt;           // clearer air once you're inside the garden
+    updateTags();
     // mist rolls out through the opening gate
     for (const m of puffs) {
       const u = m.userData, push = m.userData.behind ? open : 0.3;
@@ -491,7 +578,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
       m.material.rotation += u.spin * dt; m.material.color.copy(P.night.mist).lerp(P.day.mist, kk);
       if (m.position.z > 7 || m.position.y > 2.4) { m.position.set((Math.random() - 0.5) * 4, 0.3 + Math.random() * 0.6, -2.5 - Math.random() * 1.5); m.material.opacity = 0; }
       const fadeIn = Math.min(1, T / 1.5);
-      m.material.opacity += ((u.base * fadeIn * (m.position.z > 5 ? (7 - m.position.z) / 2 : 1)) - m.material.opacity) * 0.05;
+      m.material.opacity += ((u.base * fadeIn * (1 - 0.85 * gAmt) * (m.position.z > 5 ? (7 - m.position.z) / 2 : 1)) - m.material.opacity) * 0.05;
     }
     liveGarden(T, dt);
     const p = ffGeo.attributes.position.array;
@@ -505,7 +592,17 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
 
   return {
     replay() { t0 = performance.now(); opened = false; tick(); },
+    setBeds(list) { bedList = list; if (bedSpots.length) placeBeds(); },
+    enterGarden() {
+      if (gmode === "garden" || gmode === "entering") return;
+      fromPos.copy(camera.position); fromLook.set(0, lookY, -1); gz = gzTarget = 2.6; gT = still ? 9 : 0; gk = 0; gmode = "entering"; tick();
+    },
+    leaveGarden() {
+      if (gmode === "gate" || gmode === "leaving") return;
+      fromPos.copy(camEnd); fromLook.set(0, lookY, -1); gT = still ? 9 : 0; gmode = "leaving"; tick();
+    },
+    setPlaying(slug) { picked = slug; beds.forEach((x) => x.el.classList.toggle("on", x.slug === picked)); },
     setMode(m) { target = m === "day" ? 1 : 0; tick(); },
-    dispose() { dead = true; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", onVis); removeEventListener("pointermove", onMove); renderer.dispose(); pmrem.dispose(); },
+    dispose() { dead = true; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", onVis); removeEventListener("pointermove", onMove); removeEventListener("keydown", onKey); tags.remove(); renderer.dispose(); pmrem.dispose(); },
   };
 }

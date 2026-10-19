@@ -34,11 +34,27 @@ async function startEntrance() {
     try {
       const { startGate } = await import("/gate3d.js");
       stage.classList.add("has3d");
-      gate = startGate($("gate3d"), { mode: currentMode(), onOpen: () => stage.classList.add("is-open") });
+      gate = startGate($("gate3d"), { mode: currentMode(), onOpen: () => stage.classList.add("is-open"), onPick: pickBed });
+      if (collections.length) gate.setBeds(bedsFor3d());
+      // walk through the gate into the garden: every rose bed along the path is a collection
+      $("enter").onclick = () => { stage.classList.add("in-garden"); document.body.classList.add("garden-lock"); gate.enterGarden(); $("leave").focus(); };
+      $("leave").onclick = leaveGarden;
+      addEventListener("keydown", (e) => { if (e.key === "Escape" && stage.classList.contains("in-garden")) leaveGarden(); });
       return;
     } catch (e) { console.warn("3D gate unavailable, using the drawn gate", e); stage.classList.remove("has3d"); }
   }
   requestAnimationFrame(() => document.querySelector(".gate-wrap").classList.add("open"));
+}
+
+function leaveGarden() { $("stage").classList.remove("in-garden"); document.body.classList.remove("garden-lock"); gate?.leaveGarden(); $("enter").focus(); }
+const bedsFor3d = () => collections.map((c) => ({ slug: c.slug, name: c.name, n: c.tracks.length }));
+// tapping a rose bed in the garden: open that collection and play a song from it
+function pickBed(slug) {
+  current = slug; query = ""; $("q").value = ""; shown = PAGE;
+  history.replaceState(null, "", "#" + slug);
+  renderBeds(); renderShelf();
+  const songs = list(); if (songs.length) play(songs[Math.floor(Math.random() * songs.length)]);
+  gate?.setPlaying(slug);
 }
 
 async function init() {
@@ -56,6 +72,7 @@ async function init() {
   const q = new URLSearchParams(location.search).get("q");
   if (q) { query = q.trim(); $("q").value = query; requestAnimationFrame(() => $("library").scrollIntoView({ behavior: "smooth" })); }
   renderBeds(); renderShelf();
+  gate?.setBeds(bedsFor3d());
 }
 
 function renderBeds() {

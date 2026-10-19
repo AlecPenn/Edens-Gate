@@ -188,3 +188,40 @@ a:hover { color: #fff; }
   body { padding-bottom: 110px; }
   .song .t { font-size: 19px; overflow-wrap: anywhere; }
 }
+
+/* ── walking into the garden ── */
+.enter { display: none; }
+.stage.has3d.is-open .enter {
+  display: block; position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); z-index: 3;
+  font: inherit; font-size: 18px; letter-spacing: .08em; cursor: pointer; color: var(--verdigris);
+  background: var(--lamplight); border: 0; border-radius: 999px; padding: 12px 26px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.4), 0 8px 40px rgba(235,217,160,.55); animation: enter-in 1.2s ease both, enter-glow 3s ease-in-out 1.2s infinite;
+}
+@keyframes enter-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@keyframes enter-glow { 50% { box-shadow: 0 0 0 1px rgba(255,255,255,.5), 0 8px 60px rgba(235,217,160,.85); } }
+.garden-ui { display: none; }
+.stage.has3d.in-garden { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 40; }
+.stage.in-garden::after, .stage.in-garden .inscribed, .stage.in-garden .enter { display: none !important; }
+.stage.in-garden .garden-ui { display: flex; position: absolute; top: 14px; left: 16px; right: 140px; z-index: 3; gap: 14px; align-items: center; flex-wrap: wrap; }
+.leave { font: inherit; font-size: 16px; cursor: pointer; color: var(--lamplight); background: color-mix(in srgb, var(--verdigris) 75%, transparent);
+  border: 1px solid var(--iron); border-radius: 999px; padding: 8px 16px; backdrop-filter: blur(6px); }
+.garden-hint { margin: 0; font-size: 14px; color: var(--lamplight); background: color-mix(in srgb, var(--verdigris) 70%, transparent); padding: 6px 12px; border-radius: 999px; backdrop-filter: blur(6px); }
+body.garden-lock { overflow: hidden; }
+body.garden-lock .player { z-index: 60; }
+.bed-tags { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; opacity: 0; transition: opacity .8s ease; }
+.bed-tags.show { opacity: 1; }
+.bed-tag { position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer; transform-origin: 50% 100%;
+  display: grid; gap: 1px; padding: 7px 14px 8px; border-radius: 10px; font: inherit; text-align: center; white-space: nowrap;
+  color: #2b2208; background: linear-gradient(#f6e7b4, #e5c66f); border: 1px solid #fff6d6;
+  box-shadow: 0 6px 22px rgba(0,0,0,.35), 0 0 18px rgba(235,217,160,.35); }
+.bed-tag b { font-size: 16px; font-weight: 600; letter-spacing: .02em; }
+.bed-tag small { font-size: 12px; opacity: .75; }
+.bed-tag::after { content: ""; position: absolute; left: 50%; bottom: -16px; width: 2px; height: 16px; background: #e5c66f; transform: translateX(-50%); }
+.bed-tag.on { background: linear-gradient(#ffffff, #f6e7b4); box-shadow: 0 0 0 3px rgba(255,240,190,.9), 0 0 36px rgba(255,230,160,.95); }
+.bed-tag.on b::before { content: "♪ "; }
+.bed-tag:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+@media (max-width: 760px) {
+  .stage.in-garden .garden-ui { right: 16px; top: 64px; }
+  .garden-hint { font-size: 13px; }
+  .bed-tag b { font-size: 14px; }
+}
