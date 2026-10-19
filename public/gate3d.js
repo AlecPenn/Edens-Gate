@@ -4,6 +4,8 @@
 // if WebGL isn't available.
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 
 const GOLD = 0xc2a24d, LAMP = 0xebd9a0, IVY = 0x3d7d7b, DUSK = 0x12302c;
 
@@ -44,19 +46,20 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
   const path = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 9), new THREE.MeshBasicMaterial({ map: pathTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   path.rotation.x = -Math.PI / 2; path.position.set(0, 0.01, 1.5); scene.add(path);
 
+  const standIn = new THREE.Group(); scene.add(standIn);   // simple gate shown until the Blender model arrives
   // ── stone pillars + arch ──
   const stone = new THREE.MeshStandardMaterial({ color: 0x2c4a45, roughness: 0.85, metalness: 0.05 });
   const gold = new THREE.MeshStandardMaterial({ color: GOLD, metalness: 1, roughness: 0.3 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x1d1a14, metalness: 0.85, roughness: 0.42 });
   const W = 1.55; // half the opening
   for (const s of [-1, 1]) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.62, 3.6, 0.62), stone); p.position.set(s * (W + 0.31), 1.8, 0); scene.add(p);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 0.8), stone); cap.position.set(s * (W + 0.31), 3.69, 0); scene.add(cap);
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.2, 32, 16), gold); ball.position.set(s * (W + 0.31), 3.98, 0); scene.add(ball);
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.06, 0.66), gold); band.position.set(s * (W + 0.31), 3.2, 0); scene.add(band);
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.62, 3.6, 0.62), stone); p.position.set(s * (W + 0.31), 1.8, 0); standIn.add(p);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 0.8), stone); cap.position.set(s * (W + 0.31), 3.69, 0); standIn.add(cap);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.2, 32, 16), gold); ball.position.set(s * (W + 0.31), 3.98, 0); standIn.add(ball);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.06, 0.66), gold); band.position.set(s * (W + 0.31), 3.2, 0); standIn.add(band);
   }
-  const arch = new THREE.Mesh(new THREE.TorusGeometry(W + 0.31, 0.12, 16, 80, Math.PI), iron); arch.position.set(0, 3.6, 0); scene.add(arch);
-  const archGold = new THREE.Mesh(new THREE.TorusGeometry(W + 0.12, 0.035, 10, 80, Math.PI), gold); archGold.position.set(0, 3.6, 0); scene.add(archGold);
+  const arch = new THREE.Mesh(new THREE.TorusGeometry(W + 0.31, 0.12, 16, 80, Math.PI), iron); arch.position.set(0, 3.6, 0); standIn.add(arch);
+  const archGold = new THREE.Mesh(new THREE.TorusGeometry(W + 0.12, 0.035, 10, 80, Math.PI), gold); archGold.position.set(0, 3.6, 0); standIn.add(archGold);
 
   // ── the Alec Penn Radio wave seal, in gold ──
   // outer ring, inner ring, the wave, and three dots (same shape as the APR logo)
@@ -73,7 +76,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
 
   // ── the doors ──
   function makeDoor(side) {
-    const hinge = new THREE.Group(); hinge.position.set(side * W, 0, 0); scene.add(hinge);
+    const hinge = new THREE.Group(); hinge.position.set(side * W, 0, 0); standIn.add(hinge);
     const door = new THREE.Group(); hinge.add(door);
     const n = 9, w = W - 0.02;
     for (let i = 0; i < n; i++) {
@@ -94,7 +97,20 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     const latch = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), gold); latch.position.set(-side * (w - 0.1), 1.3, 0.06); door.add(latch);
     return hinge;
   }
-  const left = makeDoor(-1), right = makeDoor(1);
+  let left = makeDoor(-1), right = makeDoor(1);
+
+  // ── the real gate: mossy stone arch, gold doors with the Wave Seal split down the middle (modelled in Blender) ──
+  const gl = new GLTFLoader(); gl.setMeshoptDecoder(MeshoptDecoder);
+  gl.load("/gate.glb", (g) => {
+    if (dead) return;
+    const model = g.scene, S = 0.8;
+    model.scale.setScalar(S); scene.add(model);
+    const dl = model.getObjectByName("DoorL"), dr = model.getObjectByName("DoorR");
+    if (!dl || !dr) { scene.remove(model); return; }
+    model.traverse((o) => { if (o.isMesh) { o.material.envMapIntensity = 0.6; } });
+    scene.remove(standIn); left = dl; right = dr;
+    tick();
+  });
 
   // ── the garden glow behind the gate ──
   const glowTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
