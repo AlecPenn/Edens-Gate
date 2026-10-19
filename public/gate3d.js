@@ -552,7 +552,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     const ms = []; for (let i = 0; i < 3; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false, fog: false })); scene.add(m); ms.push(m); }
     return ms;
   }
-  function tommyInGarden(T, dt) { window._tdbg = () => ({ pos: tommy.position.toArray().map(v=>+v.toFixed(2)), goal: tGoal.toArray().map(v=>+v.toFixed(2)), cam: camera.position.toArray().map(v=>+v.toFixed(2)), scale: +tommy.scale.x.toFixed(2), picked, nap: +tNap.toFixed(2), pond: pondSpot && pondSpot.toArray().map(v=>+v.toFixed(2)) });
+  function tommyInGarden(T, dt) {
     const night = kk < 0.4, bed = beds.find((x) => x.slug === picked);
     let mode = "wander";
     if (night && pondSpot) { tGoal.copy(pondSpot); mode = "nap"; }
