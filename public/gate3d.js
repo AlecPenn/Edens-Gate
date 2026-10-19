@@ -157,6 +157,9 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
         if (!seen.has(key) && Math.abs(v.x) < 1.9 && v.z < -0.5) { seen.add(key); bedSpots.push(v.clone()); }
       }
     });
+    garden.traverse((o) => { if (o.isMesh && o.material && o.material.name === "Water" && !pondSpot) {
+      const bb = new THREE.Box3().setFromObject(o), c = bb.getCenter(new THREE.Vector3());
+      pondSpot = new THREE.Vector3(c.x + (bb.max.x - bb.min.x) * 0.5 + 0.25, 0, c.z + (bb.max.z - bb.min.z) * 0.2); pondFace = c.clone(); } });
     bedSpots.sort((a, b) => b.z - a.z || a.x - b.x);
     if (bedSpots.length) PATH_END = bedSpots[Math.min(bedSpots.length, 18) - 1].z + 2.6;   // stop where you can still read the last bed
     placeBeds(); tick();
@@ -458,6 +461,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   // ══════════ WALK INTO THE GARDEN: the library as a place ══════════
   // Each rose bed along the path is one collection. Walk the path (scroll, swipe, arrows), tap a sign to play it.
   const bedSpots = [], beds = [];
+  let pondSpot = null, pondFace = null;
   let bedList = [], gmode = "gate", gz = 4, gzTarget = 4, gk = 0, picked = null;
   const tags = document.createElement("div"); tags.className = "bed-tags"; canvas.parentElement.appendChild(tags);
   const pickLight = new THREE.PointLight(0xffe4a0, 0, 4, 1.6); scene.add(pickLight);
@@ -539,6 +543,41 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   const onMove = (e) => { pointer.x = e.clientX / innerWidth - 0.5; pointer.y = e.clientY / innerHeight - 0.5; };
   if (!mobile) addEventListener("pointermove", onMove);
 
+  // ── Tommy in the garden: trots along ahead of you, sits by the bed that's playing, naps by the pond at night ──
+  let tGarden = false, tHead = 0, tStride = 0, tNap = 0, tZ = null;
+  const tGoal = new THREE.Vector3(), tTmp = new THREE.Vector3();
+  function zzz() {
+    const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+    g.font = "italic 700 64px Georgia, serif"; g.fillStyle = "#f6e7b8"; g.textAlign = "center"; g.fillText("z", 64, 84);
+    const ms = []; for (let i = 0; i < 3; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false, fog: false })); scene.add(m); ms.push(m); }
+    return ms;
+  }
+  function tommyInGarden(T, dt) { window._tdbg = () => ({ pos: tommy.position.toArray().map(v=>+v.toFixed(2)), goal: tGoal.toArray().map(v=>+v.toFixed(2)), cam: camera.position.toArray().map(v=>+v.toFixed(2)), scale: +tommy.scale.x.toFixed(2), picked, nap: +tNap.toFixed(2), pond: pondSpot && pondSpot.toArray().map(v=>+v.toFixed(2)) });
+    const night = kk < 0.4, bed = beds.find((x) => x.slug === picked);
+    let mode = "wander";
+    if (night && pondSpot) { tGoal.copy(pondSpot); mode = "nap"; }
+    else if (bed) { tGoal.set(Math.sign(bed.at.x) * 0.32, 0, Math.min(bed.at.z + 0.2, gz - 3.9)); mode = "sit"; }   // by the bed, but where you can see him
+    else tGoal.set(0.22 + Math.sin(T * 0.23) * 0.15, 0, Math.min(1.2, gz - 3.5));
+    tTmp.subVectors(tGoal, tommy.position); tTmp.y = 0; const d = tTmp.length();
+    const moving = d > (mode === "wander" ? 0.6 : 0.08);
+    tStride += ((moving ? 1 : 0) - tStride) * Math.min(1, dt * 5);
+    if (moving) { tommy.position.addScaledVector(tTmp.normalize(), Math.min(d, dt * (tommy.position.z > gz - 2.4 ? 4.5 : d > 3 ? 2.4 : 1.3)));
+      const want = Math.atan2(tTmp.x, tTmp.z); let dd = want - tHead; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI; tHead += dd * Math.min(1, dt * 6); }
+    else {   // settled: face you (or the water, if he's napping)
+      const f = mode === "nap" && pondFace ? Math.atan2(pondFace.x - tommy.position.x, pondFace.z - tommy.position.z) + 1.2 : Math.atan2(camera.position.x - tommy.position.x, camera.position.z - tommy.position.z) + Math.sin(T * 0.4) * 0.15;
+      let dd = f - tHead; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI; tHead += dd * Math.min(1, dt * 2);
+    }
+    tNap += (((mode === "nap" && !moving) ? 1 : 0) - tNap) * Math.min(1, dt * 1.2);
+    const w = T * 10, sc = 1 - 0.42 * gAmt;                       // smaller in the garden so the roses are taller than him
+    tommy.scale.set(sc, sc * (1 - 0.32 * tNap + 0.012 * Math.sin(T * 1.6) * tNap), sc * (1 + 0.12 * tNap));
+    tommy.position.y = Math.abs(Math.sin(w)) * 0.06 * tStride;
+    tommy.rotation.set(-Math.cos(w) * 0.05 * tStride, tHead, 0);
+    // little z's float up while he naps
+    if (tNap > 0.3 && !tZ) tZ = zzz();
+    if (tZ) tZ.forEach((z, i) => { const ph = ((T * 0.35 + i / 3) % 1); z.position.set(tommy.position.x + 0.15 + ph * 0.25, 0.55 * sc + ph * 0.6, tommy.position.z);
+      z.scale.setScalar(0.12 + ph * 0.12); z.material.opacity = tNap * Math.sin(ph * Math.PI) * 0.9; });
+  }
+
   let last = performance.now();
   function frame(now) {
     raf = 0; if (dead || !visible || document.hidden) return;
@@ -556,9 +595,13 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     if (T > flickAt) { const f = T - flickAt; tail.rotation.y = Math.sin(f * 9) * 0.12 * Math.max(0, 1 - f / 0.9); if (f > 0.9) { tail.rotation.y = 0; flickAt = T + 3 + Math.random() * 5; } }
     head.rotation.y = Math.sin(T * 0.4) * 0.12;
     if (tommy) {   // Tommy breathes, glances around, and slow-blinks now and then
-      tommy.rotation.y = -0.3 + Math.sin(T * 0.35) * 0.18 * (1 - gAmt) + gAmt * -0.9;
-      tommy.position.x = 0.35 + gAmt * 0.95; tommy.position.z = -0.1 - gAmt * 0.35;   // he steps aside to let you in
-      const b = T - tBlink, lid = b > 0 && b < 0.8 ? Math.sin(b / 0.8 * Math.PI) : 0; if (b >= 0.8) tBlink = T + 3 + Math.random() * 4;
+      const b = T - tBlink; let lid = b > 0 && b < 0.8 ? Math.sin(b / 0.8 * Math.PI) : 0; if (b >= 0.8) tBlink = T + 3 + Math.random() * 4;
+      if (gmode === "gate" && gAmt < 0.02) {          // at the gate: he sits in the gateway
+        tGarden = false; tommy.position.set(0.35, 0, -0.1); tommy.rotation.set(0, -0.3 + Math.sin(T * 0.35) * 0.18, 0); tommy.scale.setScalar(1); tNap = 0;
+      } else {
+        if (!tGarden) { tGarden = true; tommy.position.set(1.3, 0, -0.45); tHead = -1.2; }
+        tommyInGarden(T, dt); if (tNap > 0.5) lid = 1;
+      }
       tommyLids.forEach((l) => l.quaternion.copy(tommyRest.get(l)).multiply(qx.setFromAxisAngle(X, lid * 0.75)));
     }
     if (open > 0.6 && !opened) { opened = true; onOpen && onOpen(); }
