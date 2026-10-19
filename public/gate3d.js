@@ -118,11 +118,27 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     g.fillStyle = grd; g.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c); })();
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: LAMP, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   glow.scale.set(9, 7, 1); glow.position.set(0, 1.8, -4); scene.add(glow);
-  // tree silhouettes in the garden
+  // tree silhouettes in the garden (stand-ins until the modelled garden loads)
+  const oldTrees = new THREE.Group(); scene.add(oldTrees);
   const treeMat = new THREE.MeshBasicMaterial({ color: 0x0c201d });
   for (const [x, z, s] of [[-3.2, -6, 1.3], [2.8, -7, 1.6], [-1.2, -9, 1.9], [4.5, -5, 1.1], [-5, -8, 1.7], [0.9, -11, 2.2]]) {
-    const t = new THREE.Mesh(new THREE.ConeGeometry(0.9 * s, 3.2 * s, 7), treeMat); t.position.set(x, 1.6 * s, z); scene.add(t);
+    const t = new THREE.Mesh(new THREE.ConeGeometry(0.9 * s, 3.2 * s, 7), treeMat); t.position.set(x, 1.6 * s, z); oldTrees.add(t);
   }
+
+  // ── the garden behind the gate (modelled in Blender): cypress avenue, blossom trees, flowering hedges,
+  //    a stepping-stone path with gold lanterns, and a little pond at the end ──
+  const lanternMats = [];
+  gl.load("/garden.glb", (g) => {
+    if (dead) return;
+    const garden = g.scene; garden.scale.setScalar(0.8); garden.position.z = -0.25;
+    garden.traverse((o) => { if (o.isMesh) {
+      const m = o.material; m.envMapIntensity = 0.5;
+      if (m.name === "LanternGlow") lanternMats.push(m);
+      if (/^Leaf|Cypress|Hedge/.test(m.name)) { m.userData.base = m.color.clone(); leafMats.push(m); }
+    } });
+    scene.add(garden); scene.remove(oldTrees); tick();
+  });
+  const leafMats = [], leafNight = new THREE.Color(0x163a30);
 
   // ── fireflies ──
   const FF = mobile ? 40 : 90, ffPos = new Float32Array(FF * 3), ffSeed = new Float32Array(FF);
@@ -270,6 +286,8 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     starMat.uniforms.uOpacity.value = (1 - k); starMat.uniforms.uTime.value = T;
     cat.visible = k < 0.98; fur.opacity = 1 - k; eyeMat.color.setRGB(0.85, 0.92, 0.48).multiplyScalar(1 - k);
     fireflies.visible = k < 0.95;
+    for (const m of leafMats) m.color.copy(leafNight).lerp(m.userData.base, 0.35 + 0.65 * k);
+    for (const m of lanternMats) m.emissiveIntensity = 1.2 + (1 - k) * 4;
   }
 
   // ── the walk ──
