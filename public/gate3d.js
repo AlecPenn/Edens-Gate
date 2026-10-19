@@ -142,11 +142,133 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     garden.traverse((o) => { if (o.isMesh) {
       const m = o.material; m.envMapIntensity = 0.5;
       if (m.name === "LanternGlow") lanternMats.push(m);
-      if (/^Leaf|Cypress|Hedge|Canopy/.test(m.name)) { m.userData.base = m.color.clone(); leafMats.push(m); }
+      if (/^Leaf|Cypress|Hedge|Canopy/.test(m.name) && !m.userData.base) { m.userData.base = seasonTint(m.name, m.color.clone()); leafMats.push(m); }
+      if (o.isInstancedMesh && !m.userData.sway) { m.userData.sway = true; addSway(m, /^Leaf|Blossom|Rose|CypressLeaf/.test(m.name)); }
     } });
     scene.add(garden); scene.remove(oldTrees); tick();
   });
   const leafMats = [], leafNight = new THREE.Color(0x163a30);
+
+  // ══════════ THE LIVING GARDEN ══════════
+  // the season follows the real calendar (try ?season=winter / spring / summer / autumn)
+  const SEASON = (() => {
+    const q = new URLSearchParams(location.search).get("season");
+    if (/^(spring|summer|autumn|winter)$/.test(q || "")) return q;
+    const m = new Date().getMonth();
+    return m <= 1 || m === 11 ? "winter" : m <= 4 ? "spring" : m <= 7 ? "summer" : "autumn";
+  })();
+  function seasonTint(name, c) {
+    if (SEASON === "autumn") {
+      if (name === "LeafA") return c.setRGB(0.78, 0.3, 0.06);        // copper
+      if (name === "LeafB") return c.setRGB(0.95, 0.6, 0.12);        // gold
+      if (name === "Canopy") return c.lerp(new THREE.Color(0.55, 0.28, 0.07), 0.6);
+    }
+    if (SEASON === "winter") {
+      if (name === "Hedge" || name === "Cypress" || name === "CypressLeaf") return c.lerp(new THREE.Color(0.75, 0.82, 0.85), 0.25);
+      return c.lerp(new THREE.Color(0.62, 0.68, 0.7), 0.45);       // frosted
+    }
+    if (SEASON === "spring" && name === "LeafB") return c.setRGB(0.42, 0.72, 0.3);
+    return c;
+  }
+  // wind: every tree, bush and leaf bends and flutters in the breeze (done on the graphics card, so it's free)
+  const wind = { value: 0 };
+  function addSway(mat, flutter) {
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uWind = wind;
+      sh.vertexShader = "uniform float uWind;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+        vec3 ip = vec3(0.0);
+        #ifdef USE_INSTANCING
+          ip = instanceMatrix[3].xyz;
+        #endif
+        float ph = ip.x * 0.37 + ip.z * 0.21;
+        float h = max(position.y, 0.0);
+        float bend = (sin(uWind * 1.1 + ph) * 0.7 + sin(uWind * 2.3 + ph * 1.7) * 0.3) * 0.006 * h * h;
+        transformed.x += bend; transformed.z += bend * 0.5;
+        ${flutter ? "transformed += normal * sin(uWind * 7.0 + position.x * 23.0 + position.z * 17.0) * 0.012 * min(h, 2.0);" : ""}`);
+    };
+    mat.needsUpdate = true;
+  }
+
+  const sprite = (draw) => { const c = document.createElement("canvas"); c.width = c.height = 64; draw(c.getContext("2d")); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const leafTex = sprite((g) => { g.fillStyle = "#fff"; g.beginPath(); g.ellipse(32, 32, 26, 13, 0.7, 0, Math.PI * 2); g.fill(); });
+  const flakeTex = sprite((g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 30); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.5, "rgba(255,255,255,0.7)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
+
+  // falling things: autumn leaves, spring petals, summer petals, winter snow
+  const FALL = still ? 0 : (SEASON === "winter" ? (mobile ? 260 : 600) : (mobile ? 90 : 190));
+  const fallPos = new Float32Array(FALL * 3), fallCol = new Float32Array(FALL * 3), fallSeed = new Float32Array(FALL);
+  const palette = { autumn: [0xc8501a, 0xe8a12a, 0x9e2f14, 0xd9772a], spring: [0xf6a6c1, 0xffd6e4, 0xf38fb3, 0xffffff], summer: [0xffffff, 0xf6a6c1, 0xfff0b0], winter: [0xffffff] }[SEASON];
+  for (let i = 0; i < FALL; i++) {
+    fallPos[i * 3] = (Math.random() - 0.5) * 18; fallPos[i * 3 + 1] = Math.random() * 9; fallPos[i * 3 + 2] = -14 + Math.random() * 20;
+    new THREE.Color(palette[i % palette.length]).toArray(fallCol, i * 3); fallSeed[i] = Math.random() * 100;
+  }
+  const fallGeo = new THREE.BufferGeometry();
+  fallGeo.setAttribute("position", new THREE.BufferAttribute(fallPos, 3)); fallGeo.setAttribute("color", new THREE.BufferAttribute(fallCol, 3));
+  const falling = new THREE.Points(fallGeo, new THREE.PointsMaterial({ size: SEASON === "winter" ? 0.09 : 0.13, map: SEASON === "winter" ? flakeTex : leafTex, vertexColors: true, transparent: true, depthWrite: false, alphaTest: 0.05 }));
+  if (FALL) scene.add(falling);
+  const fallSpeed = SEASON === "winter" ? 0.55 : SEASON === "autumn" ? 0.7 : 0.45;
+
+  // butterflies, by day (not in winter)
+  const butterflies = [];
+  if (!still && SEASON !== "winter") {
+    const wingCols = ["#f6a6c1", "#9ec8ff", "#ffd36b", "#c9a6ff", "#ffffff"];
+    for (let i = 0; i < (mobile ? 6 : 11); i++) {
+      const col = wingCols[i % wingCols.length];
+      const tex = sprite((g) => { g.fillStyle = col; g.beginPath(); g.ellipse(22, 22, 20, 14, -0.5, 0, Math.PI * 2); g.fill(); g.beginPath(); g.ellipse(24, 46, 13, 10, 0.4, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "rgba(60,30,20,0.55)"; g.beginPath(); g.arc(20, 22, 5, 0, Math.PI * 2); g.fill(); });
+      const wm = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.1 });
+      const b = new THREE.Group(), wl = new THREE.Group(), wr = new THREE.Group();
+      const geo = new THREE.PlaneGeometry(0.16, 0.16); geo.translate(0.08, 0, 0);
+      const ml = new THREE.Mesh(geo, wm), mr = new THREE.Mesh(geo, wm); mr.scale.x = -1;
+      wl.add(ml); wr.add(mr); b.add(wl, wr); wl.rotation.x = wr.rotation.x = -Math.PI / 2;
+      b.userData = { wl, wr, mat: wm, ax: 2 + Math.random() * 6, az: 1.5 + Math.random() * 5, cx: (Math.random() - 0.5) * 8, cz: -2 - Math.random() * 7, y: 0.5 + Math.random() * 1.6, sp: 0.15 + Math.random() * 0.2, ph: Math.random() * 10, flap: 14 + Math.random() * 8 };
+      scene.add(b); butterflies.push(b);
+    }
+  }
+
+  // shooting stars, at night
+  const streakTex = (() => { const c = document.createElement("canvas"); c.width = 256; c.height = 8; const g = c.getContext("2d");
+    const grd = g.createLinearGradient(0, 0, 256, 0); grd.addColorStop(0, "rgba(255,255,255,0)"); grd.addColorStop(0.85, "rgba(255,248,220,0.9)"); grd.addColorStop(1, "rgba(255,255,255,1)");
+    g.fillStyle = grd; g.fillRect(0, 2, 256, 4); return new THREE.CanvasTexture(c); })();
+  const shooter = new THREE.Mesh(new THREE.PlaneGeometry(5, 0.07), new THREE.MeshBasicMaterial({ map: streakTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  const shooterHolder = new THREE.Group(); shooterHolder.add(shooter); scene.add(shooterHolder);
+  let shootAt = 5 + Math.random() * 6, shootT = -1, shootDir = new THREE.Vector3(), shootFrom = new THREE.Vector3();
+
+  function liveGarden(T, dt) {
+    wind.value = T;
+    const day = kk;
+    if (FALL) {
+      const a = fallGeo.attributes.position.array;
+      for (let i = 0; i < FALL; i++) {
+        const sd = fallSeed[i];
+        a[i * 3 + 1] -= fallSpeed * dt * (0.6 + (sd % 1) * 0.8);
+        a[i * 3] += (Math.sin(T * 1.3 + sd) * 0.35 + 0.15) * dt;            // drift and tumble in the breeze
+        a[i * 3 + 2] += Math.cos(T * 0.9 + sd * 1.7) * 0.2 * dt;
+        if (a[i * 3 + 1] < 0) { a[i * 3 + 1] = 7 + Math.random() * 2; a[i * 3] = (Math.random() - 0.5) * 18; }
+      }
+      fallGeo.attributes.position.needsUpdate = true;
+      falling.material.opacity = SEASON === "winter" ? 0.95 : 0.9;
+    }
+    for (const b of butterflies) {
+      const u = b.userData, t = T * u.sp + u.ph;
+      const x = u.cx + Math.sin(t) * u.ax, z = u.cz + Math.sin(t * 1.7) * u.az, y = u.y + Math.sin(t * 2.3) * 0.4 + Math.sin(T * 5 + u.ph) * 0.05;
+      const nx = u.cx + Math.sin(t + 0.05) * u.ax, nz = u.cz + Math.sin((t + 0.05) * 1.7) * u.az;
+      b.position.set(x, y, z); b.rotation.y = Math.atan2(nx - x, nz - z) + Math.PI / 2;
+      const f = Math.sin(T * u.flap) * 0.9; u.wl.rotation.y = f; u.wr.rotation.y = -f;
+      u.mat.opacity = Math.max(0, (day - 0.3) / 0.7); b.visible = day > 0.3;
+    }
+    // shooting star
+    if (day < 0.5 && T > shootAt && shootT < 0) {
+      shootT = 0; shootFrom.set(-14 + Math.random() * 20, 12 + Math.random() * 6, -26);
+      shootDir.set(0.8 + Math.random() * 0.6, -0.35 - Math.random() * 0.3, 0).normalize();
+    }
+    if (shootT >= 0) {
+      shootT += dt; const k = shootT / 0.9;
+      shooterHolder.position.copy(shootFrom).addScaledVector(shootDir, k * 16);
+      shooterHolder.lookAt(camera.position); shooter.rotation.z = Math.atan2(-shootDir.y, shootDir.x) * -1;
+      shooter.material.opacity = Math.sin(Math.min(1, k) * Math.PI) * (1 - day);
+      if (k >= 1) { shootT = -1; shooter.material.opacity = 0; shootAt = T + 6 + Math.random() * 10; }
+    }
+  }
 
   // ── fireflies ──
   const FF = mobile ? 40 : 90, ffPos = new Float32Array(FF * 3), ffSeed = new Float32Array(FF);
@@ -185,6 +307,9 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
     day:   { top: new THREE.Color(0x6fa8c4), horizon: new THREE.Color(0xf3e3b8), fog: new THREE.Color(0xd9e4d6), fogD: 0.045, ground: new THREE.Color(0x4f7a4a),
              hemiSky: new THREE.Color(0xcfe6f2), hemiGround: new THREE.Color(0x3f5f39), hemiI: 1.25, garden: new THREE.Color(0xfff0c8), exposure: 1.0, mist: new THREE.Color(0xffffff) },
   };
+
+  if (SEASON === "winter") { P.day.ground.setRGB(0.86, 0.9, 0.92); P.night.ground.setRGB(0.16, 0.22, 0.26); }   // snow on the ground
+  if (SEASON === "autumn") { P.day.ground.lerp(new THREE.Color(0.55, 0.45, 0.22), 0.35); }                       // fallen leaves
 
   // sun: a blazing disc behind the garden, shafts of light that flicker through the gate
   const sunGroup = new THREE.Group(); sunGroup.position.set(0, 4.6, -16); scene.add(sunGroup);
@@ -368,6 +493,7 @@ export function startGate(canvas, { onOpen, mode = "night" } = {}) {
       const fadeIn = Math.min(1, T / 1.5);
       m.material.opacity += ((u.base * fadeIn * (m.position.z > 5 ? (7 - m.position.z) / 2 : 1)) - m.material.opacity) * 0.05;
     }
+    liveGarden(T, dt);
     const p = ffGeo.attributes.position.array;
     for (let i = 0; i < FF; i++) { p[i * 3 + 1] += Math.sin(now / 900 + ffSeed[i]) * 0.002; p[i * 3] += Math.cos(now / 1300 + ffSeed[i]) * 0.0015; }
     ffGeo.attributes.position.needsUpdate = true;
