@@ -231,3 +231,13 @@ body.garden-lock .player { z-index: 60; }
 .walk-pad button { width: 52px; height: 52px; border-radius: 50%; font-size: 20px; cursor: pointer; color: var(--verdigris);
   background: var(--lamplight); border: 0; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
 .walk-pad button:active { transform: scale(.94); }
+
+/* live on YouTube */
+.live-pill { display: flex; width: max-content; max-width: 100%; box-sizing: border-box; align-items: center; gap: 10px; margin: 4px auto 18px; padding: 9px 18px; border-radius: 999px;
+  border: 1px solid #e0566a; background: rgba(42, 7, 12, 0.55); color: #ffe3e7; text-decoration: none; letter-spacing: 0.04em;
+  animation: live-glow 2.4s ease-in-out infinite; }
+.live-pill:hover { background: rgba(70, 12, 20, 0.7); }
+.live-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff3b4e; box-shadow: 0 0 8px #ff3b4e; animation: live-dot 1.2s ease-in-out infinite; }
+@keyframes live-glow { 0%, 100% { box-shadow: 0 0 6px rgba(224, 86, 106, 0.25); } 50% { box-shadow: 0 0 20px rgba(224, 86, 106, 0.65); } }
+@keyframes live-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .live-pill, .live-dot { animation: none; } }
