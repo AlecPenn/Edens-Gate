@@ -23,7 +23,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
-<script>try{var m=localStorage.getItem("egMode");if(!m){var h=new Date().getHours();m=(h>=6&&h<18)?"day":"night"}document.documentElement.dataset.theme=m}catch(e){document.documentElement.dataset.theme="night"}</script>
+<script>document.documentElement.classList.add("js");try{var m=localStorage.getItem("egMode");if(!m){var h=new Date().getHours();m=(h>=6&&h<18)?"day":"night"}document.documentElement.dataset.theme=m}catch(e){document.documentElement.dataset.theme="night"}</script>
 <link rel="stylesheet" href="/styles.css">
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
@@ -31,7 +31,8 @@
 <a class="skip" href="#library">Skip to the library</a>
 
 <header class="gate-wrap">
-  <div class="stage" id="stage">
+  <div class="stage loading" id="stage">
+    <div class="gate-loading" role="status"><span class="gate-loading-seal" aria-hidden="true">✦</span><span class="gate-loading-title">Eden’s Gate</span><span class="gate-loading-text">Opening the gate<span class="gate-loading-dots" aria-hidden="true"> · · ·</span></span></div>
     <canvas id="gate3d" aria-hidden="true"></canvas>
     <svg class="gate" viewBox="0 -50 800 570" role="img" aria-labelledby="gate-title">
       <title id="gate-title">An iron garden gate swinging open</title>

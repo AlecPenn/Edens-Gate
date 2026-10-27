@@ -241,3 +241,15 @@ body.garden-lock .player { z-index: 60; }
 @keyframes live-glow { 0%, 100% { box-shadow: 0 0 6px rgba(224, 86, 106, 0.25); } 50% { box-shadow: 0 0 20px rgba(224, 86, 106, 0.65); } }
 @keyframes live-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .live-pill, .live-dot { animation: none; } }
+
+/* Keep the illustrated fallback and the 3D canvas hidden until the updated models are ready. */
+.js .stage.loading { min-height: clamp(440px, 82vh, 860px); }
+.js .stage.loading .gate, .js .stage.loading #gate3d { visibility: hidden; }
+.gate-loading { display: none; }
+.js .stage.loading .gate-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--lamplight); pointer-events: none; }
+.gate-loading-seal { display: grid; place-items: center; width: 68px; height: 68px; border: 1px solid currentColor; border-radius: 50%; font-size: 28px; box-shadow: 0 0 35px rgba(235,217,160,.15), inset 0 0 20px rgba(235,217,160,.08); }
+.gate-loading-title { font-family: var(--inscribed); font-size: clamp(20px, 3vw, 30px); text-transform: uppercase; letter-spacing: .25em; }
+.gate-loading-text { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; opacity: .8; }
+.gate-loading-dots { animation: gate-loading-pulse 1.5s ease-in-out infinite; }
+@keyframes gate-loading-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .gate-loading-dots { animation: none; } }

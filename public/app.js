@@ -35,6 +35,10 @@ async function startEntrance() {
       const { startGate } = await import("/gate3d.js");
       stage.classList.add("has3d");
       gate = startGate($("gate3d"), { mode: currentMode(), onOpen: () => stage.classList.add("is-open"), onPick: pickBed });
+      await Promise.race([gate.ready, new Promise((_, reject) => setTimeout(() => reject(new Error("3D models timed out")), 20000))]);
+      stage.classList.remove("is-open");
+      gate.replay();
+      stage.classList.remove("loading");
       if (collections.length) gate.setBeds(bedsFor3d());
       // walk through the gate into the garden: every rose bed along the path is a collection
       $("enter").onclick = () => { stage.classList.add("in-garden"); document.body.classList.add("garden-lock"); gate.enterGarden(); $("leave").focus(); };
@@ -42,8 +46,9 @@ async function startEntrance() {
       $("walk-fwd").onclick = () => gate.walk(2); $("walk-back").onclick = () => gate.walk(-2);
       addEventListener("keydown", (e) => { if (e.key === "Escape" && stage.classList.contains("in-garden")) leaveGarden(); });
       return;
-    } catch (e) { console.warn("3D gate unavailable, using the drawn gate", e); stage.classList.remove("has3d"); }
+    } catch (e) { console.warn("3D gate unavailable, using the drawn gate", e); gate?.dispose(); gate = null; stage.classList.remove("has3d", "is-open"); }
   }
+  stage.classList.remove("loading");
   requestAnimationFrame(() => document.querySelector(".gate-wrap").classList.add("open"));
 }
 

@@ -101,12 +101,16 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
 
   // ── the real gate: mossy stone arch, gold doors with the Wave Seal split down the middle (modelled in Blender) ──
   const gl = new GLTFLoader(); gl.setMeshoptDecoder(MeshoptDecoder);
+  let gateLoaded, gateFailed, catLoaded, catFailed;
+  const gateReady = new Promise((resolve, reject) => { gateLoaded = resolve; gateFailed = reject; });
+  const catReady = new Promise((resolve, reject) => { catLoaded = resolve; catFailed = reject; });
+  const ready = Promise.all([gateReady, catReady]);
   gl.load("/gate.glb", (g) => {
     if (dead) return;
     const model = g.scene, S = 0.8;
     model.scale.setScalar(S); scene.add(model);
     const dl = model.getObjectByName("DoorL"), dr = model.getObjectByName("DoorR");
-    if (!dl || !dr) { scene.remove(model); return; }
+    if (!dl || !dr) { scene.remove(model); gateFailed(new Error("Gate model is missing its doors")); return; }
     model.traverse((o) => { if (o.isMesh) { o.material.envMapIntensity = 0.6; } });
     // the doors' long cross-bars point straight at you once the gate is open and read as a line across the
     // archway, so only the low bar stays (the bars are held by the arch and the medallion)
@@ -117,8 +121,8 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
       if (sz.x > 0.6 && sz.y < 0.12 && b.getCenter(new THREE.Vector3()).y > 0.6) o.visible = false;
     });
     scene.remove(standIn); left = dl; right = dr; swing = 1.42;
-    tick();
-  });
+    tick(); gateLoaded();
+  }, undefined, gateFailed);
 
   // ── the garden glow behind the gate ──
   const glowTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
@@ -428,8 +432,8 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     tommy = new THREE.Group(); tommy.add(t); tommy.position.set(0.35, 0, -0.1); tommy.rotation.y = -0.3; scene.add(tommy);
     tommyLids = ["TLidL", "TLidR"].map((n) => t.getObjectByName(n)).filter(Boolean);
     tommyLids.forEach((l) => tommyRest.set(l, l.quaternion.clone()));
-    cat.visible = false; tick();
-  });
+    cat.visible = false; tick(); catLoaded();
+  }, undefined, catFailed);
   const qx = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0);
 
   let target = mode === "day" ? 1 : 0, kk = target; // 0 = night, 1 = day
@@ -642,6 +646,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   tick();
 
   return {
+    ready,
     replay() { t0 = performance.now(); opened = false; tick(); },
     setBeds(list) { bedList = list; if (bedSpots.length) placeBeds(); },
     enterGarden() {
