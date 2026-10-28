@@ -588,7 +588,9 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     // Keep his body grounded; alternating leg pairs do the walking.
     tommy.position.y = 0;
     tommy.rotation.set(0, tHead, 0);
-    if (walkAction) walkAction.setEffectiveWeight(still ? 0 : tStride);
+    // Reduced-motion mode still moves Tommy to follow the visitor. Animate his
+    // legs during that essential movement so he does not slide across the path.
+    if (walkAction) walkAction.setEffectiveWeight(tStride);
     if (walkMixer) walkMixer.update(traveled * walkDuration / (0.20 * catModelScale * sc));
     // little z's float up while he naps
     if (tNap > 0.3 && !tZ) tZ = zzz();
