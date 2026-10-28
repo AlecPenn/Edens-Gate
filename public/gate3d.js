@@ -426,7 +426,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   let blinkAt = 3, flickAt = 5;
   // Tommy (the real one: black cat, wizard hat, gold APR pendant) takes the cat's seat in the gateway
   let tommy = null, walkMixer = null, walkAction = null;
-  gl.load("/tommy-realistic-v4.glb", (g) => {
+  gl.load("/tommy-realistic-v5.glb", (g) => {
     if (dead) return;
     const t = g.scene;
     // The source cat faces +X; orient him toward +Z for the garden's movement code.
