@@ -24,7 +24,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <script>document.documentElement.classList.add("js");try{var m=localStorage.getItem("egMode");if(!m){var h=new Date().getHours();m=(h>=6&&h<18)?"day":"night"}document.documentElement.dataset.theme=m}catch(e){document.documentElement.dataset.theme="night"}</script>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/styles.css?v=20261028c">
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -88,6 +88,7 @@
     </div>
   </div>
   <div class="intro">
+    <p class="intro-eyebrow"><span aria-hidden="true">✦</span> A sanctuary for sound <span aria-hidden="true">✦</span></p>
     <h1>Eden's Gate</h1>
     <p class="lede">It always was.</p>
     <p class="about">A library of free music from <a href="https://alecpennradio.com">Alec Penn Radio</a>. <span id="count">Every song</span> is yours to listen to, download and use for anything. No sign-up. No credit required.</p>
@@ -101,6 +102,7 @@
 
 <main id="library" class="library">
   <nav class="beds" aria-label="Collections">
+    <div class="library-label">Explore the collections</div>
     <ul id="beds"></ul>
   </nav>
   <section class="shelf" aria-live="polite">
@@ -111,12 +113,13 @@
 
 <section class="terms">
   <h2>What you can do with it</h2>
-  <p>Everything here is dedicated to the public domain under <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>. Put it in your videos, games, podcasts, ads or films. Remix it, sample it, sell what you make. You don't need permission and you don't need to give credit, though a mention of Alec Penn Radio is always welcome.</p>
+  <p>All of the music here is dedicated to the public domain under <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>. Put it in your videos, games, podcasts, ads or films. Remix it, sample it, sell what you make. You don't need permission and you don't need to give credit, though a mention of Alec Penn Radio is always welcome.</p>
   <p>The music is AI co-created with Suno and hosted for free by the <a href="https://archive.org/search?query=creator%3A%22Alec+Penn+Radio%22">Internet Archive</a>.</p>
 </section>
 
 <footer class="foot">
   <span>Eden's Gate</span>
+  <small>Tommy’s cat model adapted from <a href="https://sketchfab.com/3d-models/medium-poly-cat-in-motion-3d-model-free-5c31c77904de4e458d434c167ea0f4bc">iRahulRajput</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</small>
   <a href="https://alecpennradio.com">Listen live on Alec Penn Radio</a>
 </footer>
 
@@ -133,7 +136,7 @@
 </div>
 <audio id="audio" preload="none"></audio>
 
-<script src="/app.js" type="module"></script>
+<script src="/app.js?v=20261028c" type="module"></script>
 <!-- Free visitor counts (Vercel Web Analytics): no cookies, no personal data -->
 <script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>
 <script defer src="/_vercel/insights/script.js"></script>

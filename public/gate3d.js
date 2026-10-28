@@ -3,6 +3,7 @@
 // and the camera walks you up to the threshold. Falls back to the flat SVG gate
 // if WebGL isn't available.
 import * as THREE from "three";
+import { addSakuraTrees } from "./sakura.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
@@ -150,6 +151,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
       if (o.isInstancedMesh && !m.userData.sway) { m.userData.sway = true; addSway(m, /^Leaf|Blossom|Rose|CypressLeaf|Grass|Sepal/.test(m.name)); }
     } });
     scene.add(garden); scene.remove(oldTrees);
+    addSakuraTrees(scene, mobile);
     // the rose bushes that line the path become the library's beds, one collection each
     garden.updateMatrixWorld(true);
     const seen = new Set(), m4 = new THREE.Matrix4(), v = new THREE.Vector3();
@@ -308,13 +310,13 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     for (let i = 0; i < 26; i++) { const x = s / 2 + (Math.random() - 0.5) * s * 0.45, y = s / 2 + (Math.random() - 0.5) * s * 0.45, r = s * (0.12 + Math.random() * 0.22);
       const grd = g.createRadialGradient(x, y, 0, x, y, r); grd.addColorStop(0, "rgba(255,255,255,0.18)"); grd.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = grd; g.fillRect(0, 0, s, s); }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
-  const PUFFS = mobile ? 26 : 55, puffs = [];
+  const PUFFS = mobile ? 14 : 30, puffs = [];
   for (let i = 0; i < PUFFS; i++) {
     const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: i % 3 ? 0x9fc9c4 : 0xe8dcb4, transparent: true, opacity: 0, depthWrite: false }));
     const behind = i < PUFFS * 0.6;
     m.position.set((Math.random() - 0.5) * (behind ? 4 : 12), 0.3 + Math.random() * 1.1, behind ? -0.5 - Math.random() * 3 : 0.5 + Math.random() * 5);
     const sc = 2.2 + Math.random() * 3; m.scale.set(sc, sc * 0.6, 1);
-    m.userData = { v: new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.02 + Math.random() * 0.03, 0.15 + Math.random() * 0.35), spin: (Math.random() - 0.5) * 0.15, base: 0.18 + Math.random() * 0.22, behind };
+    m.userData = { v: new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.02 + Math.random() * 0.03, 0.15 + Math.random() * 0.35), spin: (Math.random() - 0.5) * 0.15, base: 0.07 + Math.random() * 0.08, behind };
     scene.add(m); puffs.push(m);
   }
 
@@ -423,18 +425,19 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   const tailTip = new THREE.Group(); cat.add(tailTip);
   let blinkAt = 3, flickAt = 5;
   // Tommy (the real one: black cat, wizard hat, gold APR pendant) takes the cat's seat in the gateway
-  let tommy = null, tommyLids = [], tommyRest = new Map(), tBlink = 4;
-  gl.load("/tommy.glb", (g) => {
+  let tommy = null, walkMixer = null, walkAction = null;
+  gl.load("/tommy-realistic-v4.glb", (g) => {
     if (dead) return;
-    const t = g.scene, box = new THREE.Box3().setFromObject(t), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
-    const k = 1.55 / sz.y; t.scale.setScalar(k); t.position.set(-c.x * k, -box.min.y * k, -c.z * k);
-    t.traverse((o) => { const m = o.material; if (m && "sheen" in m && m.sheen > 0) { m.sheen = 0.3; m.sheenRoughness = 0.5; } });
-    tommy = new THREE.Group(); tommy.add(t); tommy.position.set(0.35, 0, -0.1); tommy.rotation.y = -0.3; scene.add(tommy);
-    tommyLids = ["TLidL", "TLidR"].map((n) => t.getObjectByName(n)).filter(Boolean);
-    tommyLids.forEach((l) => tommyRest.set(l, l.quaternion.clone()));
+    const t = g.scene;
+    // The source cat faces +X; orient him toward +Z for the garden's movement code.
+    t.rotation.y = -Math.PI / 2; t.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(t), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const k = 1.95 / sz.y; t.scale.setScalar(k); t.position.set(-c.x * k, -box.min.y * k, -c.z * k);
+    tommy = new THREE.Group(); tommy.add(t); const catFill = new THREE.PointLight(0xffdfad, 2, 3.5, 2); catFill.position.set(0.5, 1.6, 1.2); tommy.add(catFill); tommy.position.set(0.35, 0, -0.1); tommy.rotation.y = -0.3; scene.add(tommy);
+    const clip = g.animations.find((a) => a.name === "Walk");
+    if (clip) { walkMixer = new THREE.AnimationMixer(t); walkAction = walkMixer.clipAction(clip); walkAction.setEffectiveWeight(0); walkAction.play(); }
     cat.visible = false; tick(); catLoaded();
   }, undefined, catFailed);
-  const qx = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0);
 
   let target = mode === "day" ? 1 : 0, kk = target; // 0 = night, 1 = day
   const tmp = new THREE.Color(), treeNight = new THREE.Color(0x0c201d), treeDay = new THREE.Color(0x2e5a3c);
@@ -559,7 +562,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   function tommyInGarden(T, dt) {
     const night = kk < 0.4, bed = beds.find((x) => x.slug === picked);
     let mode = "wander";
-    if (night && pondSpot) { tGoal.copy(pondSpot); mode = "nap"; }
+    if (night && pondSpot && gz < pondSpot.z + 4) { tGoal.copy(pondSpot); mode = "nap"; }
     else if (bed) { tGoal.set(Math.sign(bed.at.x) * 0.32, 0, Math.min(bed.at.z + 0.2, gz - 3.9)); mode = "sit"; }   // by the bed, but where you can see him
     else tGoal.set(0.22 + Math.sin(T * 0.23) * 0.15, 0, Math.min(1.2, gz - 3.5));
     tTmp.subVectors(tGoal, tommy.position); tTmp.y = 0; const d = tTmp.length();
@@ -574,8 +577,11 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     tNap += (((mode === "nap" && !moving) ? 1 : 0) - tNap) * Math.min(1, dt * 1.2);
     const w = T * 10, sc = 1 - 0.42 * gAmt;                       // smaller in the garden so the roses are taller than him
     tommy.scale.set(sc, sc * (1 - 0.32 * tNap + 0.012 * Math.sin(T * 1.6) * tNap), sc * (1 + 0.12 * tNap));
-    tommy.position.y = Math.abs(Math.sin(w)) * 0.06 * tStride;
-    tommy.rotation.set(-Math.cos(w) * 0.05 * tStride, tHead, 0);
+    // Keep his body grounded; alternating leg pairs do the walking.
+    tommy.position.y = 0;
+    tommy.rotation.set(0, tHead, 0);
+    if (walkAction) walkAction.setEffectiveWeight(still ? 0 : tStride);
+    if (walkMixer) walkMixer.update(dt);
     // little z's float up while he naps
     if (tNap > 0.3 && !tZ) tZ = zzz();
     if (tZ) tZ.forEach((z, i) => { const ph = ((T * 0.35 + i / 3) % 1); z.position.set(tommy.position.x + 0.15 + ph * 0.25, 0.55 * sc + ph * 0.6, tommy.position.z);
@@ -590,7 +596,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     const open = easeIO((T - 1.1) / 3.2);           // doors: hold a beat, then swing
     left.rotation.y = open * swing; right.rotation.y = -open * swing; // swing inward, into the garden (wide open, folded back against the pillars)
     const light = ease((T - 0.9) / 3.5);
-    garden.intensity = 2 + light * 38; glow.material.opacity = (0.15 + light * 0.75) * (1 - 0.55 * kk);   // softer by day so the garden shows through
+    garden.intensity = 2 + light * 38; glow.material.opacity = (0.08 + light * 0.36) * (1 - 0.55 * kk);   // softer by day so the garden shows through
     path.material.opacity = light * 0.35; fireflies.material.opacity = light * 0.9 * (1 - kk);
     kk += (target - kk) * Math.min(1, dt * 1.6); applyMode(kk, T, now);
     for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 30) c.position.x = -30; }
@@ -599,14 +605,13 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     if (T > flickAt) { const f = T - flickAt; tail.rotation.y = Math.sin(f * 9) * 0.12 * Math.max(0, 1 - f / 0.9); if (f > 0.9) { tail.rotation.y = 0; flickAt = T + 3 + Math.random() * 5; } }
     head.rotation.y = Math.sin(T * 0.4) * 0.12;
     if (tommy) {   // Tommy breathes, glances around, and slow-blinks now and then
-      const b = T - tBlink; let lid = b > 0 && b < 0.8 ? Math.sin(b / 0.8 * Math.PI) : 0; if (b >= 0.8) tBlink = T + 3 + Math.random() * 4;
       if (gmode === "gate" && gAmt < 0.02) {          // at the gate: he sits in the gateway
-        tGarden = false; tommy.position.set(0.35, 0, -0.1); tommy.rotation.set(0, -0.3 + Math.sin(T * 0.35) * 0.18, 0); tommy.scale.setScalar(1); tNap = 0;
+        tGarden = false; if (walkAction) walkAction.setEffectiveWeight(0); if (walkMixer) walkMixer.update(dt); tommy.position.set(0.35, 0, -0.1); tommy.rotation.set(0, -0.3 + Math.sin(T * 0.35) * 0.18, 0); tommy.scale.setScalar(1); tNap = 0;
       } else {
         if (!tGarden) { tGarden = true; tommy.position.set(1.3, 0, -0.45); tHead = -1.2; }
-        tommyInGarden(T, dt); if (tNap > 0.5) lid = 1;
+        tommyInGarden(T, dt);
       }
-      tommyLids.forEach((l) => l.quaternion.copy(tommyRest.get(l)).multiply(qx.setFromAxisAngle(X, lid * 0.75)));
+
     }
     if (open > 0.6 && !opened) { opened = true; onOpen && onOpen(); }
     // camera walks forward, then breathes

@@ -45,7 +45,7 @@ a:hover { color: #fff; }
 .stage.has3d { max-width: none; padding: 0; height: clamp(440px, 82vh, 860px); }
 .stage.has3d #gate3d { display: block; width: 100%; height: 100%; }
 .stage.has3d .gate { display: none; }
-.stage.has3d::after { content: ""; position: absolute; inset: auto 0 0 0; height: 30%; background: linear-gradient(transparent, var(--verdigris)); pointer-events: none; }
+.stage.has3d::after { content: ""; position: absolute; inset: auto 0 0 0; height: 16%; background: linear-gradient(transparent, var(--verdigris)); pointer-events: none; }
 .inscribed { display: none; }
 .stage.has3d .inscribed {
   display: block; position: absolute; left: 0; right: 0; top: clamp(14px, 3vh, 34px); margin: 0;
@@ -192,7 +192,7 @@ a:hover { color: #fff; }
 /* ── walking into the garden ── */
 .enter { display: none; }
 .stage.has3d.is-open .enter {
-  display: block; position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); z-index: 3;
+  display: block; position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); z-index: 3;
   font: inherit; font-size: 18px; letter-spacing: .08em; cursor: pointer; color: var(--verdigris);
   background: var(--lamplight); border: 0; border-radius: 999px; padding: 12px 26px;
   box-shadow: 0 0 0 1px rgba(255,255,255,.4), 0 8px 40px rgba(235,217,160,.55); animation: enter-in 1.2s ease both, enter-glow 3s ease-in-out 1.2s infinite;
@@ -253,3 +253,30 @@ body.garden-lock .player { z-index: 60; }
 .gate-loading-dots { animation: gate-loading-pulse 1.5s ease-in-out infinite; }
 @keyframes gate-loading-pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .gate-loading-dots { animation: none; } }
+
+/* The listening room: warm metal, soft glass and a little more breathing room. */
+body { background-image: radial-gradient(ellipse at 50% 42%, rgba(62, 111, 86, .13), transparent 50%), linear-gradient(180deg, transparent 30%, rgba(3, 20, 18, .27)); }
+.intro { position: relative; max-width: 980px; margin-inline: auto; }
+.intro-eyebrow { margin: 0 0 14px; font: 500 10px var(--mono); color: var(--iron); text-transform: uppercase; letter-spacing: .3em; }
+.intro-eyebrow span { padding: 0 10px; opacity: .7; }
+.intro h1 { text-shadow: 0 2px 28px rgba(235,217,160,.15); }
+.about { color: color-mix(in srgb, var(--mist) 88%, transparent); }
+.search { display: block; max-width: 560px; margin: 0 auto; }
+.search input { width: 100%; padding: 16px 25px; border-color: color-mix(in srgb, var(--iron) 50%, transparent); background: color-mix(in srgb, var(--moss) 82%, transparent); box-shadow: 0 10px 32px rgba(0,0,0,.12), inset 0 1px rgba(255,255,255,.04); transition: border-color .2s, box-shadow .2s; }
+.search input:focus { border-color: var(--lamplight); box-shadow: 0 0 0 3px color-mix(in srgb, var(--iron) 22%, transparent); }
+.library { max-width: 1120px; gap: 50px; margin-top: 72px; }
+.library-label { padding: 0 0 14px; font: 500 10px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--iron); }
+.beds button { padding: 8px 12px; border-radius: 9px; transition: background .2s, color .2s; }
+.beds button:hover, .beds button[aria-current="true"] { background: color-mix(in srgb, var(--ivy) 14%, transparent); }
+.shelf-head { padding: 0 0 20px; }
+.shelf-head img { border: 1px solid color-mix(in srgb, var(--iron) 50%, transparent); box-shadow: 0 10px 28px rgba(0,0,0,.2); }
+.song { padding: 12px 10px; transition: background .2s; }
+.song:hover { background: color-mix(in srgb, var(--ivy) 10%, transparent); }
+.song img { box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+.song.playing { border-left: 2px solid var(--iron); }
+.terms { padding: 28px 32px; border: 1px solid color-mix(in srgb, var(--iron) 30%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--moss) 58%, transparent); }
+.player { box-shadow: 0 -12px 40px rgba(0,0,0,.22); }
+:root[data-theme="day"] body { background-image: radial-gradient(ellipse at 50% 40%, rgba(195, 163, 85, .13), transparent 52%); }
+@media (max-width:760px) { .library { gap: 24px; margin-top: 48px; } .library-label { padding-left: 16px; } .beds button { padding: 8px 16px; } .song { padding: 12px 5px; } .terms { margin-inline: 16px; padding: 24px; } }
+@media (prefers-reduced-motion:reduce) { .search input, .beds button, .song { transition: none; } }
+@media (min-width: 761px) { .stage.has3d.is-open .enter { left: calc(50% + 230px); bottom: 12%; } }
