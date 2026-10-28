@@ -32,7 +32,7 @@ async function startEntrance() {
   const stage = $("stage");
   if (webgl()) {
     try {
-      const { startGate } = await import("/gate3d.js?v=20261028d");
+      const { startGate } = await import("/gate3d.js?v=20261028e");
       stage.classList.add("has3d");
       gate = startGate($("gate3d"), { mode: currentMode(), onOpen: () => stage.classList.add("is-open"), onPick: pickBed });
       await Promise.race([gate.ready, new Promise((_, reject) => setTimeout(() => reject(new Error("3D models timed out")), 20000))]);

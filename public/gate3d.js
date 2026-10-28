@@ -3,7 +3,7 @@
 // and the camera walks you up to the threshold. Falls back to the flat SVG gate
 // if WebGL isn't available.
 import * as THREE from "three";
-import { addSakuraTrees } from "./sakura.js";
+import { addSakuraTrees } from "./sakura.js?v=20261028e";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
@@ -102,10 +102,11 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
 
   // ── the real gate: mossy stone arch, gold doors with the Wave Seal split down the middle (modelled in Blender) ──
   const gl = new GLTFLoader(); gl.setMeshoptDecoder(MeshoptDecoder);
-  let gateLoaded, gateFailed, catLoaded, catFailed;
+  let gateLoaded, gateFailed, catLoaded, catFailed, treesLoaded, treesFailed;
   const gateReady = new Promise((resolve, reject) => { gateLoaded = resolve; gateFailed = reject; });
   const catReady = new Promise((resolve, reject) => { catLoaded = resolve; catFailed = reject; });
-  const ready = Promise.all([gateReady, catReady]);
+  const treesReady = new Promise((resolve, reject) => { treesLoaded = resolve; treesFailed = reject; });
+  const ready = Promise.all([gateReady, catReady, treesReady]);
   gl.load("/gate.glb", (g) => {
     if (dead) return;
     const model = g.scene, S = 0.8;
@@ -151,7 +152,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
       if (o.isInstancedMesh && !m.userData.sway) { m.userData.sway = true; addSway(m, /^Leaf|Blossom|Rose|CypressLeaf|Grass|Sepal/.test(m.name)); }
     } });
     scene.add(garden); scene.remove(oldTrees);
-    addSakuraTrees(scene, mobile);
+    addSakuraTrees(scene, gl).then(() => { tick(); treesLoaded(); }, treesFailed);
     // the rose bushes that line the path become the library's beds, one collection each
     garden.updateMatrixWorld(true);
     const seen = new Set(), m4 = new THREE.Matrix4(), v = new THREE.Vector3();
@@ -169,7 +170,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     bedSpots.sort((a, b) => b.z - a.z || a.x - b.x);
     if (bedSpots.length) PATH_END = bedSpots[Math.min(bedSpots.length, 18) - 1].z + 2.6;   // stop where you can still read the last bed
     placeBeds(); tick();
-  });
+  }, undefined, treesFailed);
   const leafMats = [], leafNight = new THREE.Color(0x163a30);
 
   // ══════════ THE LIVING GARDEN ══════════
@@ -425,17 +426,17 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   const tailTip = new THREE.Group(); cat.add(tailTip);
   let blinkAt = 3, flickAt = 5;
   // Tommy (the real one: black cat, wizard hat, gold APR pendant) takes the cat's seat in the gateway
-  let tommy = null, walkMixer = null, walkAction = null;
-  gl.load("/tommy-realistic-v5.glb", (g) => {
+  let tommy = null, walkMixer = null, walkAction = null, walkDuration = 0, catModelScale = 1;
+  gl.load("/tommy-walk-v6.glb", (g) => {
     if (dead) return;
     const t = g.scene;
     // The source cat faces +X; orient him toward +Z for the garden's movement code.
     t.rotation.y = -Math.PI / 2; t.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(t), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
-    const k = 1.95 / sz.y; t.scale.setScalar(k); t.position.set(-c.x * k, -box.min.y * k, -c.z * k);
+    const k = 1.95 / sz.y; catModelScale = k; t.scale.setScalar(k); t.position.set(-c.x * k, -box.min.y * k, -c.z * k);
     tommy = new THREE.Group(); tommy.add(t); const catFill = new THREE.PointLight(0xffdfad, 2, 3.5, 2); catFill.position.set(0.5, 1.6, 1.2); tommy.add(catFill); tommy.position.set(0.35, 0, -0.1); tommy.rotation.y = -0.3; scene.add(tommy);
     const clip = g.animations.find((a) => a.name === "Walk");
-    if (clip) { walkMixer = new THREE.AnimationMixer(t); walkAction = walkMixer.clipAction(clip); walkAction.setEffectiveWeight(0); walkAction.play(); }
+    if (clip) { walkDuration = clip.duration; walkMixer = new THREE.AnimationMixer(t); walkAction = walkMixer.clipAction(clip); walkAction.setEffectiveWeight(0); walkAction.play(); }
     cat.visible = false; tick(); catLoaded();
   }, undefined, catFailed);
 
@@ -568,8 +569,15 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     tTmp.subVectors(tGoal, tommy.position); tTmp.y = 0; const d = tTmp.length();
     const moving = d > (mode === "wander" ? 0.6 : 0.08);
     tStride += ((moving ? 1 : 0) - tStride) * Math.min(1, dt * 5);
-    if (moving) { tommy.position.addScaledVector(tTmp.normalize(), Math.min(d, dt * (tommy.position.z > gz - 2.4 ? 4.5 : d > 3 ? 2.4 : 1.3)));
-      const want = Math.atan2(tTmp.x, tTmp.z); let dd = want - tHead; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI; tHead += dd * Math.min(1, dt * 6); }
+    let traveled = 0;
+    if (moving) {
+      const want = Math.atan2(tTmp.x, tTmp.z); let dd = want - tHead; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
+      tHead += dd * Math.min(1, dt * 6);
+      // Turn before taking a step, so the paws move in the direction he faces.
+      const alignment = Math.max(0, Math.cos(dd));
+      traveled = Math.min(d, dt * 0.85 * alignment);
+      tommy.position.addScaledVector(tTmp.normalize(), traveled);
+    }
     else {   // settled: face you (or the water, if he's napping)
       const f = mode === "nap" && pondFace ? Math.atan2(pondFace.x - tommy.position.x, pondFace.z - tommy.position.z) + 1.2 : Math.atan2(camera.position.x - tommy.position.x, camera.position.z - tommy.position.z) + Math.sin(T * 0.4) * 0.15;
       let dd = f - tHead; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI; tHead += dd * Math.min(1, dt * 2);
@@ -581,7 +589,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     tommy.position.y = 0;
     tommy.rotation.set(0, tHead, 0);
     if (walkAction) walkAction.setEffectiveWeight(still ? 0 : tStride);
-    if (walkMixer) walkMixer.update(dt);
+    if (walkMixer) walkMixer.update(traveled * walkDuration / (0.20 * catModelScale * sc));
     // little z's float up while he naps
     if (tNap > 0.3 && !tZ) tZ = zzz();
     if (tZ) tZ.forEach((z, i) => { const ph = ((T * 0.35 + i / 3) % 1); z.position.set(tommy.position.x + 0.15 + ph * 0.25, 0.55 * sc + ph * 0.6, tommy.position.z);
