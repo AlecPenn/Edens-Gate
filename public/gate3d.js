@@ -427,7 +427,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   let blinkAt = 3, flickAt = 5;
   // Tommy (the real one: black cat, wizard hat, gold APR pendant) takes the cat's seat in the gateway
   let tommy = null, walkMixer = null, walkAction = null, walkDuration = 0, catModelScale = 1;
-  gl.load("/tommy-walk-v6.glb", (g) => {
+  gl.load("/tommy-walk-v7.glb", (g) => {
     if (dead) return;
     const t = g.scene;
     // The source cat faces +X; orient him toward +Z for the garden's movement code.
@@ -552,7 +552,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
   if (!mobile) addEventListener("pointermove", onMove);
 
   // ── Tommy in the garden: trots along ahead of you, sits by the bed that's playing, naps by the pond at night ──
-  let tGarden = false, tHead = 0, tStride = 0, tNap = 0, tZ = null;
+  let tGarden = false, tHead = 0, tStride = 0, tSpeed = 0, tNap = 0, tZ = null;
   const tGoal = new THREE.Vector3(), tTmp = new THREE.Vector3();
   function zzz() {
     const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
@@ -567,15 +567,19 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     else if (bed) { tGoal.set(Math.sign(bed.at.x) * 0.32, 0, Math.min(bed.at.z + 0.2, gz - 3.9)); mode = "sit"; }   // by the bed, but where you can see him
     else tGoal.set(0.22 + Math.sin(T * 0.23) * 0.15, 0, Math.min(1.2, gz - 3.5));
     tTmp.subVectors(tGoal, tommy.position); tTmp.y = 0; const d = tTmp.length();
-    const moving = d > (mode === "wander" ? 0.6 : 0.08);
-    tStride += ((moving ? 1 : 0) - tStride) * Math.min(1, dt * 5);
+    const stopDistance = mode === "wander" ? 0.6 : 0.08;
+    const moving = d > stopDistance;
+    // Slow down as he approaches his destination instead of stopping abruptly.
+    const desiredSpeed = Math.min(0.85, Math.max(0, (d - stopDistance) * 1.8));
+    tSpeed += (desiredSpeed - tSpeed) * Math.min(1, dt * 4);
+    tStride += ((moving ? 1 : 0) - tStride) * Math.min(1, dt * 4);
     let traveled = 0;
     if (moving) {
       const want = Math.atan2(tTmp.x, tTmp.z); let dd = want - tHead; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
       tHead += dd * Math.min(1, dt * 6);
       // Turn before taking a step, so the paws move in the direction he faces.
-      const alignment = Math.max(0, Math.cos(dd));
-      traveled = Math.min(d, dt * 0.85 * alignment);
+      const alignment = Math.max(0, Math.min(1, (Math.cos(dd) - 0.65) / 0.35));
+      traveled = Math.min(Math.max(0, d - stopDistance), dt * tSpeed * alignment);
       tommy.position.addScaledVector(tTmp.normalize(), traveled);
     }
     else {   // settled: face you (or the water, if he's napping)
@@ -616,7 +620,7 @@ export function startGate(canvas, { onOpen, onPick, mode = "night" } = {}) {
     head.rotation.y = Math.sin(T * 0.4) * 0.12;
     if (tommy) {   // Tommy breathes, glances around, and slow-blinks now and then
       if (gmode === "gate" && gAmt < 0.02) {          // at the gate: he sits in the gateway
-        tGarden = false; if (walkAction) walkAction.setEffectiveWeight(0); if (walkMixer) walkMixer.update(dt); tommy.position.set(0.35, 0, -0.1); tommy.rotation.set(0, -0.3 + Math.sin(T * 0.35) * 0.18, 0); tommy.scale.setScalar(1); tNap = 0;
+        tGarden = false; tSpeed = 0; tStride = 0; if (walkAction) walkAction.setEffectiveWeight(0); if (walkMixer) walkMixer.update(dt); tommy.position.set(0.35, 0, -0.1); tommy.rotation.set(0, -0.3 + Math.sin(T * 0.35) * 0.18, 0); tommy.scale.setScalar(1); tNap = 0;
       } else {
         if (!tGarden) { tGarden = true; tommy.position.set(1.3, 0, -0.45); tHead = -1.2; }
         tommyInGarden(T, dt);
